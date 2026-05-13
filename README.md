@@ -5,6 +5,14 @@
 The goal is to make work, personal, and client identities explicit across tools
 like Claude Code, Codex, and Cursor without repeated logout/login flows.
 
+## Current commands
+
+```sh
+aith tools
+aith status
+aith status codex
+```
+
 ## Planned commands
 
 ```sh
@@ -21,4 +29,3 @@ aith status
 - Tool-native: use each upstream tool's supported auth and config mechanisms.
 - Explicit: profile switches should be visible and reversible.
 - Session-friendly: support one-command and shell-scoped temporary identities.
-
