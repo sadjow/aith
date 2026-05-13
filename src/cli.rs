@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::profiles::{ProfileStore, SaveResult, UseResult};
 use crate::tools::{Tool, ToolStatus};
 
 #[derive(Debug, Parser)]
@@ -13,6 +14,38 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Save the current auth state as a named profile.
+    #[command(alias = "add")]
+    Save {
+        /// Tool whose current auth state should be saved.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Profile name to create.
+        profile: String,
+
+        /// Overwrite the profile if it already exists.
+        #[arg(long, short)]
+        force: bool,
+    },
+
+    /// Switch a tool to a saved profile.
+    Use {
+        /// Tool to switch.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Profile name to use.
+        profile: String,
+    },
+
+    /// List saved profiles.
+    List {
+        /// Tool whose profiles should be listed.
+        #[arg(value_enum)]
+        tool: ToolArg,
+    },
+
     /// Show auth/config status for supported tools.
     Status {
         /// Limit the status output to one tool.
@@ -45,6 +78,37 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Command::Save {
+            tool,
+            profile,
+            force,
+        } => {
+            let store = ProfileStore::new()?;
+            let result = store.save(tool.into(), &profile, force)?;
+            print_save_result(&result);
+        }
+        Command::Use { tool, profile } => {
+            let store = ProfileStore::new()?;
+            let result = store.use_profile(tool.into(), &profile)?;
+            print_use_result(&result);
+        }
+        Command::List { tool } => {
+            let tool = Tool::from(tool);
+            let store = ProfileStore::new()?;
+            let profiles = store.list(tool)?;
+
+            if profiles.is_empty() {
+                println!(
+                    "no {} profiles saved in {}",
+                    tool.key(),
+                    store.root().display()
+                );
+            } else {
+                for profile in profiles {
+                    println!("{profile}");
+                }
+            }
+        }
         Command::Status { tool } => {
             let tools = match tool {
                 Some(tool) => vec![tool.into()],
@@ -67,6 +131,26 @@ pub fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_save_result(result: &SaveResult) {
+    println!("saved {} profile '{}'", result.tool.key(), result.profile);
+    println!("  source      {}", result.source.display());
+    println!("  destination {}", result.destination.display());
+}
+
+fn print_use_result(result: &UseResult) {
+    println!(
+        "switched {} to profile '{}'",
+        result.tool.key(),
+        result.profile
+    );
+    println!("  source      {}", result.source.display());
+    println!("  destination {}", result.destination.display());
+
+    if let Some(backup) = &result.backup {
+        println!("  backup      {}", backup.display());
+    }
 }
 
 fn print_status(status: &ToolStatus) {

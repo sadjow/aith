@@ -1,5 +1,6 @@
-use std::env;
 use std::path::PathBuf;
+
+use crate::paths::{cursor_user_dir, env_path_or_home, home_dir};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tool {
@@ -141,32 +142,7 @@ fn env_checks(names: &[&'static str]) -> Vec<EnvCheck> {
         .iter()
         .map(|name| EnvCheck {
             name,
-            is_set: env::var_os(name).is_some(),
+            is_set: std::env::var_os(name).is_some(),
         })
         .collect()
-}
-
-fn env_path_or_home(env_name: &str, home_relative: &str) -> Option<PathBuf> {
-    env::var_os(env_name)
-        .map(PathBuf::from)
-        .or_else(|| home_dir().map(|home| home.join(home_relative)))
-}
-
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME").map(PathBuf::from)
-}
-
-fn cursor_user_dir() -> Option<PathBuf> {
-    if cfg!(target_os = "macos") {
-        home_dir().map(|home| home.join("Library/Application Support/Cursor/User"))
-    } else if cfg!(target_os = "windows") {
-        env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .map(|app_data| app_data.join("Cursor").join("User"))
-    } else {
-        env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| home_dir().map(|home| home.join(".config")))
-            .map(|config| config.join("Cursor").join("User"))
-    }
 }
