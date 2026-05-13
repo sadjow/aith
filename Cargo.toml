@@ -1,0 +1,12 @@
+[package]
+name = "aith"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Account profile switching for AI coding tools"
+license = "Apache-2.0"
+repository = "https://github.com/sadjow/aith"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
