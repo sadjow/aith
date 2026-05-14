@@ -17,6 +17,27 @@ aith list codex
 aith use codex work
 ```
 
+## Development
+
+This project uses [devenv](https://devenv.sh/) to provide a pinned Rust
+toolchain.
+
+```sh
+devenv shell
+cargo check
+cargo test
+```
+
+Common one-off checks can run without entering an interactive shell:
+
+```sh
+devenv shell -- check
+devenv shell -- fmt
+devenv shell -- clippy
+devenv shell -- tests
+devenv shell -- ci
+```
+
 ## Planned commands
 
 ```sh

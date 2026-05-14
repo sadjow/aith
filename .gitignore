@@ -1,8 +1,8 @@
 /target/
+/.devenv/
 /.idea/
 /.vscode/
 *.swp
 *.swo
 *.log
 .DS_Store
-
