@@ -56,6 +56,12 @@ jobs:
 
           const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
           packageJson.name = packageName;
+          if (typeof packageJson.repository === "string") {
+            packageJson.repository = {
+              type: "git",
+              url: "git+https://github.com/sadjow/aith.git",
+            };
+          }
           fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 
           if (fs.existsSync(shrinkwrapPath)) {
@@ -65,6 +71,14 @@ jobs:
               shrinkwrap.packages[""].name = packageName;
             }
             fs.writeFileSync(shrinkwrapPath, `${JSON.stringify(shrinkwrap, null, 2)}\n`);
+          }
+
+          for (const file of ["README.md", "CHANGELOG.md"]) {
+            const path = `npm-src/package/${file}`;
+            if (fs.existsSync(path)) {
+              const content = fs.readFileSync(path, "utf8");
+              fs.writeFileSync(path, content.replaceAll("npm install aith@", "npm install @sadjow/aith@"));
+            }
           }
           NODE
 
