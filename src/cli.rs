@@ -199,9 +199,10 @@ pub fn run() -> Result<()> {
             let tool = Tool::from(tool);
             let store = ProfileStore::new()?;
             let result = if from_env.is_empty() && set_env.is_empty() {
-                if tool == Tool::Claude {
+                if matches!(tool, Tool::Claude | Tool::Cursor) {
                     bail!(
-                        "Claude profiles are env-based; pass --from-env TARGET=SOURCE or --set-env NAME=VALUE"
+                        "{} profiles are env-based; pass --from-env TARGET=SOURCE or --set-env NAME=VALUE",
+                        tool.display_name()
                     );
                 }
                 store.save(tool, &profile, force)?

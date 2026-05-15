@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use crate::paths::cursor_user_dir;
-
 pub(crate) mod claude;
 pub(crate) mod codex;
+pub(crate) mod cursor;
+pub(crate) mod env_session;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tool {
@@ -66,17 +66,8 @@ impl Tool {
         match self {
             Tool::Codex => codex::inspect(),
             Tool::Claude => claude::inspect(),
-            Tool::Cursor => inspect_cursor(),
+            Tool::Cursor => cursor::inspect(),
         }
-    }
-}
-
-fn inspect_cursor() -> ToolStatus {
-    ToolStatus {
-        tool: Tool::Cursor,
-        paths: vec![path_check("user data", cursor_user_dir())],
-        env: env_checks(&["CURSOR_API_KEY"]),
-        notes: vec!["Cursor Agent supports session auth through CURSOR_API_KEY or --api-key"],
     }
 }
 

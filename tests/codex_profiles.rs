@@ -67,6 +67,14 @@ impl TestEnv {
             .join("profile.toml")
     }
 
+    fn cursor_profile(&self, profile: &str) -> PathBuf {
+        self.aith_home
+            .join("profiles")
+            .join("cursor")
+            .join(profile)
+            .join("profile.toml")
+    }
+
     fn backup_dir(&self) -> PathBuf {
         self.aith_home.join("backups").join("codex")
     }
@@ -107,6 +115,8 @@ impl TestEnv {
             "CLAUDE_CODE_USE_FOUNDRY",
             "ANTHROPIC_BASE_URL",
             "ANTHROPIC_API_KEY_WORK",
+            "CURSOR_API_KEY",
+            "CURSOR_API_KEY_WORK",
         ] {
             command.env_remove(name);
         }
@@ -510,6 +520,116 @@ fn shell_uses_claude_env_profile() {
 }
 
 #[test]
+fn save_list_and_remove_cursor_env_profiles_without_storing_secret() {
+    let env = TestEnv::new();
+
+    env.command()
+        .env("CURSOR_API_KEY_WORK", "cursor-secret-key")
+        .args([
+            "save",
+            "cursor",
+            "work",
+            "--from-env",
+            "CURSOR_API_KEY=CURSOR_API_KEY_WORK",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved cursor profile 'work'"))
+        .stdout(predicate::str::contains("source      environment"));
+
+    let profile = fs::read_to_string(env.cursor_profile("work")).expect("read cursor profile");
+    assert!(profile.contains("from_env = \"CURSOR_API_KEY_WORK\""));
+    assert!(!profile.contains("cursor-secret-key"));
+
+    env.command()
+        .args(["list", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+
+    env.command()
+        .args(["current", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cursor: unknown"));
+
+    env.command()
+        .args(["backups", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no cursor backups saved"));
+
+    env.command()
+        .args(["remove", "cursor", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed cursor profile 'work'"));
+
+    assert!(!env.cursor_profile("work").exists());
+}
+
+#[test]
+fn exec_uses_cursor_env_profile() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "cursor",
+            "work",
+            "--from-env",
+            "CURSOR_API_KEY=CURSOR_API_KEY_WORK",
+        ])
+        .assert()
+        .success();
+
+    env.command()
+        .env("CURSOR_API_KEY_WORK", "cursor-secret-key")
+        .args([
+            "exec",
+            "cursor",
+            "work",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s|%s|%s' \"$CURSOR_API_KEY\" \"$AITH_TOOL\" \"$AITH_PROFILE\"",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cursor-secret-key|cursor|work"));
+}
+
+#[test]
+fn shell_uses_cursor_env_profile() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "cursor",
+            "work",
+            "--from-env",
+            "CURSOR_API_KEY=CURSOR_API_KEY_WORK",
+        ])
+        .assert()
+        .success();
+
+    let fake_shell = env.aith_home.join("cursor-shell");
+    write_executable(
+        &fake_shell,
+        "#!/bin/sh\nprintf '%s|%s|%s' \"$CURSOR_API_KEY\" \"$AITH_TOOL\" \"$AITH_PROFILE\"\n",
+    );
+
+    env.command()
+        .env("SHELL", &fake_shell)
+        .env("CURSOR_API_KEY_WORK", "cursor-secret-key")
+        .args(["shell", "cursor", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cursor-secret-key|cursor|work"));
+}
+
+#[test]
 fn doctor_reports_ready_codex_profile_state() {
     let env = TestEnv::new();
     env.write_auth("work");
@@ -595,6 +715,44 @@ fn doctor_reports_claude_terminal_auth_env_without_printing_secret() {
             "info              Claude terminal auth environment is configured",
         ))
         .stdout(predicate::str::contains("test-secret-key").not());
+}
+
+#[test]
+fn doctor_reports_cursor_env_profile_state() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args(["doctor", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Cursor (cursor)"))
+        .stdout(predicate::str::contains("user data"))
+        .stdout(predicate::str::contains("env CURSOR_API_KEY unset"))
+        .stdout(predicate::str::contains("profiles          0"))
+        .stdout(predicate::str::contains("backups           0"))
+        .stdout(predicate::str::contains("current           unknown"))
+        .stdout(predicate::str::contains(
+            "info              no Cursor env profiles are saved",
+        ))
+        .stdout(predicate::str::contains(
+            "warning           Cursor global login switching is not implemented; env profiles support exec and shell only",
+        ));
+}
+
+#[test]
+fn doctor_reports_cursor_terminal_auth_env_without_printing_secret() {
+    let env = TestEnv::new();
+
+    env.command()
+        .env("CURSOR_API_KEY", "cursor-secret-key")
+        .args(["doctor", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("env CURSOR_API_KEY set"))
+        .stdout(predicate::str::contains(
+            "info              Cursor terminal auth environment is configured",
+        ))
+        .stdout(predicate::str::contains("cursor-secret-key").not());
 }
 
 fn shell_path(path: &Path) -> String {

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::profiles::{CurrentState, ProfileStore};
-use crate::tools::{Tool, ToolStatus, claude};
+use crate::tools::{Tool, ToolStatus, claude, cursor};
 
 #[derive(Debug)]
 pub struct DoctorReport {
@@ -66,7 +66,7 @@ fn diagnose_tool(store: &ProfileStore, tool: Tool) -> Result<ToolDoctor> {
     match tool {
         Tool::Codex => diagnose_codex(store),
         Tool::Claude => diagnose_claude(store),
-        Tool::Cursor => Ok(diagnose_unsupported(tool)),
+        Tool::Cursor => diagnose_cursor(store),
     }
 }
 
@@ -185,16 +185,44 @@ fn diagnose_claude(store: &ProfileStore) -> Result<ToolDoctor> {
     })
 }
 
-fn diagnose_unsupported(tool: Tool) -> ToolDoctor {
-    ToolDoctor {
-        tool,
-        status: tool.inspect(),
-        profiles: DoctorProfileSummary::Unsupported,
-        findings: vec![DoctorFinding::warning(format!(
-            "{} profile switching is not implemented yet",
-            tool.display_name()
-        ))],
+fn diagnose_cursor(store: &ProfileStore) -> Result<ToolDoctor> {
+    let tool = Tool::Cursor;
+    let status = tool.inspect();
+    let profiles = store.list(tool)?;
+    let backups = store.backups(tool)?;
+    let current = DoctorCurrent::from(store.current(tool)?.state);
+    let mut findings = Vec::new();
+
+    if cursor::has_terminal_auth_env() {
+        findings.push(DoctorFinding::info(
+            "Cursor terminal auth environment is configured",
+        ));
     }
+
+    if profiles.is_empty() {
+        findings.push(DoctorFinding::info(
+            "no Cursor env profiles are saved; run `aith save cursor <profile> --from-env CURSOR_API_KEY=SOURCE_ENV` to create one",
+        ));
+    } else {
+        findings.push(DoctorFinding::info(
+            "Cursor env session profiles are available for exec and shell",
+        ));
+    }
+
+    findings.push(DoctorFinding::warning(
+        "Cursor global login switching is not implemented; env profiles support exec and shell only",
+    ));
+
+    Ok(ToolDoctor {
+        tool,
+        status,
+        profiles: DoctorProfileSummary::Supported {
+            profile_count: profiles.len(),
+            backup_count: backups.len(),
+            current,
+        },
+        findings,
+    })
 }
 
 fn path_exists(status: &ToolStatus, label: &str) -> bool {

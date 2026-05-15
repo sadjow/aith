@@ -17,18 +17,21 @@ Implemented:
 - Claude Code auth/config discovery.
 - Claude Code env-profile save/list/remove.
 - Claude Code one-command and shell-scoped env-profile sessions.
+- Cursor env-profile save/list/remove.
+- Cursor one-command and shell-scoped env-profile sessions.
 - Codex profile save/list/current/use/remove.
 - Codex backup list/restore.
 - Codex one-command temporary profile execution.
 - Codex shell-scoped temporary profile sessions.
 - Automatic backup before replacing active Codex auth.
-- Private Unix permissions for stored profile directories and auth files.
+- Private Unix permissions for stored profile directories, auth files, and env
+  profile files.
 
 Not implemented yet:
 
 - Claude Code global login switching, including subscription/Keychain account
   switching.
-- Cursor profile switching.
+- Cursor global login switching beyond terminal API-key sessions.
 
 ## Quick Start
 
@@ -81,6 +84,14 @@ cargo run -- save claude work --from-env ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WOR
 cargo run -- exec claude work -- claude
 ```
 
+Save a Cursor env profile without storing the secret value:
+
+```sh
+export CURSOR_API_KEY_WORK=...
+cargo run -- save cursor work --from-env CURSOR_API_KEY=CURSOR_API_KEY_WORK
+cargo run -- exec cursor work -- cursor-agent
+```
+
 Remove a saved Codex profile:
 
 ```sh
@@ -122,8 +133,9 @@ aith doctor claude
 aith doctor cursor
 ```
 
-For Claude Code, `doctor` reports both safe path/env status and saved env
-profiles. It still warns that global Claude login switching is not implemented.
+For Claude Code and Cursor, `doctor` reports both safe path/env status and saved
+env profiles. It still warns that global login switching is not implemented for
+those tools.
 
 ### Save
 
@@ -145,12 +157,13 @@ Profiles can be overwritten explicitly:
 aith save codex personal --force
 ```
 
-Claude Code profiles are env-based. `aith` stores references to source
-environment variables, not their values:
+Claude Code and Cursor profiles are env-based. `aith` stores references to
+source environment variables, not their values:
 
 ```sh
 export ANTHROPIC_API_KEY_WORK=sk-ant-...
 aith save claude work --from-env ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK
+aith save cursor work --from-env CURSOR_API_KEY=CURSOR_API_KEY_WORK
 ```
 
 Non-secret settings can be stored as literals:
@@ -172,6 +185,7 @@ List saved profiles for a tool:
 ```sh
 aith list codex
 aith list claude
+aith list cursor
 ```
 
 ### Current
@@ -181,6 +195,7 @@ Detect which saved profile matches the active auth state:
 ```sh
 aith current codex
 aith current claude
+aith current cursor
 ```
 
 Possible outputs:
@@ -192,9 +207,9 @@ codex: ambiguous
   matches personal, duplicate
 ```
 
-`ambiguous` means more than one saved profile has the same auth snapshot.
-Claude env profiles are session-scoped, so `aith current claude` reports
-`claude: unknown` instead of trying to infer a global active account.
+`ambiguous` means more than one saved profile has the same auth snapshot. Env
+profiles are session-scoped, so `aith current claude` and `aith current cursor`
+report `unknown` instead of trying to infer a global active account.
 
 ### Use
 
@@ -214,6 +229,7 @@ Remove a saved profile:
 ```sh
 aith remove codex old-client
 aith remove claude old-client
+aith remove cursor old-client
 ```
 
 By default, `remove` refuses to delete a profile that matches the active auth
@@ -239,9 +255,10 @@ List backups created before profile switches or restores:
 ```sh
 aith backups codex
 aith backups claude
+aith backups cursor
 ```
 
-Claude env profiles do not replace active auth files, so there are no Claude
+Env profiles do not replace active auth files, so there are no Claude or Cursor
 backups to list.
 
 Example output:
@@ -275,6 +292,7 @@ Run a command with a temporary profile-scoped auth environment:
 aith exec codex personal -- codex
 aith exec codex work -- codex exec "review this repo"
 aith exec claude work -- claude
+aith exec cursor work -- cursor-agent
 ```
 
 For Codex, `exec` creates a temporary `CODEX_HOME`, copies the selected
@@ -285,9 +303,9 @@ The active Codex auth file is not modified, and the temporary directory is
 removed after the command exits. `aith exec` exits with the same status code as
 the child command.
 
-For Claude Code, `exec` resolves saved env references at runtime and starts the
-child command with those target variables set. Claude config files, login state,
-and Keychain entries are not modified.
+For Claude Code and Cursor, `exec` resolves saved env references at runtime and
+starts the child command with those target variables set. Config files, login
+state, and Keychain entries are not modified.
 
 ### Shell
 
@@ -296,6 +314,7 @@ Start a shell with a temporary profile-scoped auth environment:
 ```sh
 aith shell codex personal
 aith shell claude work
+aith shell cursor work
 ```
 
 For Codex, `shell` stages the selected profile exactly like `exec`, then starts
@@ -306,10 +325,10 @@ The active Codex auth file is not modified, and the temporary directory is
 removed when the shell exits. `aith shell` exits with the same status code as
 the shell.
 
-For Claude Code, `shell` resolves saved env references and starts your configured
-shell with those variables set. This lets separate terminal tabs use different
-Claude API-key profiles at the same time when the upstream Claude Code command
-honors terminal auth env vars.
+For Claude Code and Cursor, `shell` resolves saved env references and starts your
+configured shell with those variables set. This lets separate terminal tabs use
+different API-key profiles at the same time when the upstream command honors
+terminal auth env vars.
 
 ## Storage
 
@@ -332,10 +351,10 @@ Codex backups are stored as:
 backups/codex/auth-<timestamp>-<pid>.json
 ```
 
-Claude env profiles are stored as:
+Env profiles for Claude Code and Cursor are stored as:
 
 ```text
-profiles/claude/<profile>/profile.toml
+profiles/<tool>/<profile>/profile.toml
 ```
 
 Example Claude profile:
@@ -344,6 +363,13 @@ Example Claude profile:
 [env]
 ANTHROPIC_API_KEY = { from_env = "ANTHROPIC_API_KEY_WORK" }
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+```
+
+Example Cursor profile:
+
+```toml
+[env]
+CURSOR_API_KEY = { from_env = "CURSOR_API_KEY_WORK" }
 ```
 
 On Unix, profile directories are created with `0700` permissions and auth files
@@ -381,6 +407,15 @@ References:
 - [Claude Code authentication](https://code.claude.com/docs/en/team)
 - [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
 
+## Cursor Env Profiles
+
+`aith status cursor` and `aith doctor cursor` check the Cursor user data path and
+terminal auth environment without printing credential values.
+
+Cursor env profiles set terminal auth environment variables for
+`aith exec cursor ...` and `aith shell cursor ...` sessions. They do not modify
+Cursor user data or any global login state.
+
 ## Safety Model
 
 - Credential file contents are never printed by status/doctor/current/list
@@ -391,16 +426,16 @@ References:
   auth.
 - `shell` starts a temporary `CODEX_HOME` session and does not modify active
   Codex auth.
-- Claude env profiles store source env variable names for secrets, not secret
-  values. Secret values are resolved only when `exec` or `shell` starts.
-- Claude env sessions do not modify Claude config files, credential files, or
-  macOS Keychain entries.
+- Env profiles store source env variable names for secrets, not secret values.
+  Secret values are resolved only when `exec` or `shell` starts.
+- Claude and Cursor env sessions do not modify config files, credential files,
+  user data, or macOS Keychain entries.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
 - `restore` only accepts generated backup IDs in the form
   `auth-<timestamp>-<pid>.json`.
-- Claude Code global login switching and Cursor profile switching intentionally
-  return “not implemented yet” until their auth models are handled explicitly.
+- Claude Code and Cursor global login switching intentionally return “not
+  implemented yet” until their auth models are handled explicitly.
 
 ## Development
 
@@ -424,8 +459,9 @@ devenv shell cargo test
 devenv shell ci
 ```
 
-Integration tests run the real `aith` binary against temporary fake `AITH_HOME`
-and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
+Integration tests run the real `aith` binary against temporary fake `AITH_HOME`,
+`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, and `HOME` directories. They do not read or
+modify real tool credentials.
 
 ## Continuous Integration
 
@@ -449,12 +485,8 @@ The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
 - `src/tools/claude.rs`: Claude Code auth/config discovery and env-profile
   sessions.
 - `src/tools/codex.rs`: Codex auth/profile behavior.
-
-## Planned Commands
-
-```sh
-aith exec cursor work -- cursor agent
-```
+- `src/tools/cursor.rs`: Cursor auth discovery and env-profile sessions.
+- `src/tools/env_session.rs`: shared env-profile session behavior.
 
 ## Design Direction
 
