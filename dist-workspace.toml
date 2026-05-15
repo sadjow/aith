@@ -8,7 +8,7 @@ cargo-dist-version = "0.30.4"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew"]
+installers = ["shell", "powershell", "homebrew", "npm"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 # Path that installers should place binaries in
@@ -19,5 +19,6 @@ hosting = "github"
 install-updater = false
 # Homebrew tap repository used by the generated formula.
 tap = "sadjow/homebrew-tap"
-# Publish the generated formula. Requires HOMEBREW_TAP_TOKEN in the repo secrets.
-publish-jobs = ["homebrew"]
+# Publish generated package-manager artifacts.
+# Requires HOMEBREW_TAP_TOKEN and NPM_TOKEN in the repo secrets.
+publish-jobs = ["homebrew", "npm"]
