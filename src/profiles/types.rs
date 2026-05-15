@@ -6,7 +6,7 @@ use crate::tools::Tool;
 pub struct SaveResult {
     pub tool: Tool,
     pub profile: String,
-    pub source: PathBuf,
+    pub source: Option<PathBuf>,
     pub destination: PathBuf,
 }
 

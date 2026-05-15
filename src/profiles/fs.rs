@@ -82,6 +82,51 @@ pub(crate) fn copy_file_private(source: &Path, destination: &Path) -> Result<()>
     })
 }
 
+pub(crate) fn write_file_private(destination: &Path, contents: &[u8]) -> Result<()> {
+    let parent = parent_dir(destination)?;
+    create_private_dir_all(parent)?;
+
+    let tmp = parent.join(format!(
+        ".{}.tmp-{}",
+        destination
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("aith"),
+        std::process::id()
+    ));
+
+    let write_result =
+        fs::write(&tmp, contents).with_context(|| format!("failed to write {}", tmp.display()));
+
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&tmp);
+        return Err(error);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        if let Err(error) = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600)) {
+            let _ = fs::remove_file(&tmp);
+            return Err(error).with_context(|| format!("failed to secure {}", tmp.display()));
+        }
+    }
+
+    if destination.exists() {
+        fs::remove_file(destination)
+            .with_context(|| format!("failed to replace {}", destination.display()))?;
+    }
+
+    fs::rename(&tmp, destination).with_context(|| {
+        format!(
+            "failed to move {} to {}",
+            tmp.display(),
+            destination.display()
+        )
+    })
+}
+
 #[derive(Debug)]
 pub(crate) struct TempDir {
     path: PathBuf,

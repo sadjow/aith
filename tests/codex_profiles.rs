@@ -59,6 +59,14 @@ impl TestEnv {
             .join("auth.json")
     }
 
+    fn claude_profile(&self, profile: &str) -> PathBuf {
+        self.aith_home
+            .join("profiles")
+            .join("claude")
+            .join(profile)
+            .join("profile.toml")
+    }
+
     fn backup_dir(&self) -> PathBuf {
         self.aith_home.join("backups").join("codex")
     }
@@ -97,6 +105,8 @@ impl TestEnv {
             "CLAUDE_CODE_USE_BEDROCK",
             "CLAUDE_CODE_USE_VERTEX",
             "CLAUDE_CODE_USE_FOUNDRY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_API_KEY_WORK",
         ] {
             command.env_remove(name);
         }
@@ -338,6 +348,168 @@ fn shell_propagates_shell_exit_status() {
 }
 
 #[test]
+fn save_list_and_remove_claude_env_profiles_without_storing_secret() {
+    let env = TestEnv::new();
+
+    env.command()
+        .env("ANTHROPIC_API_KEY_WORK", "test-secret-key")
+        .args([
+            "save",
+            "claude",
+            "work",
+            "--from-env",
+            "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK",
+            "--set-env",
+            "ANTHROPIC_BASE_URL=https://api.example.test",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved claude profile 'work'"))
+        .stdout(predicate::str::contains("source      environment"));
+
+    let profile = fs::read_to_string(env.claude_profile("work")).expect("read claude profile");
+    assert!(profile.contains("from_env = \"ANTHROPIC_API_KEY_WORK\""));
+    assert!(profile.contains("ANTHROPIC_BASE_URL = \"https://api.example.test\""));
+    assert!(!profile.contains("test-secret-key"));
+
+    env.command()
+        .args(["list", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+
+    env.command()
+        .args(["current", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("claude: unknown"));
+
+    env.command()
+        .args(["backups", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no claude backups saved"));
+
+    env.command()
+        .args(["remove", "claude", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed claude profile 'work'"));
+
+    assert!(!env.claude_profile("work").exists());
+}
+
+#[test]
+fn save_claude_env_profile_rejects_literal_sensitive_values() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "claude",
+            "bad",
+            "--set-env",
+            "ANTHROPIC_API_KEY=test-secret-key",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "refusing to store literal value for sensitive env ANTHROPIC_API_KEY",
+        ));
+
+    assert!(!env.claude_profile("bad").exists());
+}
+
+#[test]
+fn exec_uses_claude_env_profile() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "claude",
+            "work",
+            "--from-env",
+            "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK",
+            "--set-env",
+            "ANTHROPIC_BASE_URL=https://api.example.test",
+        ])
+        .assert()
+        .success();
+
+    env.command()
+        .env("ANTHROPIC_API_KEY_WORK", "test-secret-key")
+        .args([
+            "exec",
+            "claude",
+            "work",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s|%s|%s|%s' \"$ANTHROPIC_API_KEY\" \"$ANTHROPIC_BASE_URL\" \"$AITH_TOOL\" \"$AITH_PROFILE\"",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "test-secret-key|https://api.example.test|claude|work",
+        ));
+}
+
+#[test]
+fn exec_claude_env_profile_requires_source_env_at_runtime() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "claude",
+            "work",
+            "--from-env",
+            "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK",
+        ])
+        .assert()
+        .success();
+
+    env.command()
+        .args(["exec", "claude", "work", "--", "sh", "-c", "exit 0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "source env ANTHROPIC_API_KEY_WORK is not set for target env ANTHROPIC_API_KEY",
+        ));
+}
+
+#[test]
+fn shell_uses_claude_env_profile() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args([
+            "save",
+            "claude",
+            "work",
+            "--from-env",
+            "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK",
+        ])
+        .assert()
+        .success();
+
+    let fake_shell = env.aith_home.join("claude-shell");
+    write_executable(
+        &fake_shell,
+        "#!/bin/sh\nprintf '%s|%s|%s' \"$ANTHROPIC_API_KEY\" \"$AITH_TOOL\" \"$AITH_PROFILE\"\n",
+    );
+
+    env.command()
+        .env("SHELL", &fake_shell)
+        .env("ANTHROPIC_API_KEY_WORK", "test-secret-key")
+        .args(["shell", "claude", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test-secret-key|claude|work"));
+}
+
+#[test]
 fn doctor_reports_ready_codex_profile_state() {
     let env = TestEnv::new();
     env.write_auth("work");
@@ -386,7 +558,7 @@ fn doctor_warns_when_codex_auth_and_profiles_are_missing() {
 }
 
 #[test]
-fn doctor_reports_unsupported_tools() {
+fn doctor_reports_claude_env_profile_state() {
     let env = TestEnv::new();
 
     env.command()
@@ -398,11 +570,14 @@ fn doctor_reports_unsupported_tools() {
         .stdout(predicate::str::contains("user settings"))
         .stdout(predicate::str::contains("project settings"))
         .stdout(predicate::str::contains("env ANTHROPIC_API_KEY unset"))
-        .stdout(predicate::str::contains("profiles          unsupported"))
-        .stdout(predicate::str::contains("backups           unsupported"))
-        .stdout(predicate::str::contains("current           unsupported"))
+        .stdout(predicate::str::contains("profiles          0"))
+        .stdout(predicate::str::contains("backups           0"))
+        .stdout(predicate::str::contains("current           unknown"))
         .stdout(predicate::str::contains(
-            "warning           Claude Code profile switching is not implemented yet; discovery only",
+            "info              no Claude env profiles are saved",
+        ))
+        .stdout(predicate::str::contains(
+            "warning           Claude global login switching is not implemented; env profiles support exec and shell only",
         ));
 }
 

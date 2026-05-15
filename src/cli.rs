@@ -1,14 +1,15 @@
 use std::ffi::OsString;
+use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::doctor::{
     DoctorCurrent, DoctorProfileSummary, DoctorReport, DoctorSeverity, ToolDoctor,
 };
 use crate::profiles::{
-    BackupEntry, CurrentResult, CurrentState, ProfileStore, RemoveResult, RestoreResult,
-    SaveResult, UseResult,
+    BackupEntry, CurrentResult, CurrentState, EnvProfileMapping, EnvProfileSpec, ProfileStore,
+    RemoveResult, RestoreResult, SaveResult, UseResult,
 };
 use crate::tools::{Tool, ToolStatus};
 
@@ -35,6 +36,14 @@ enum Command {
         /// Overwrite the profile if it already exists.
         #[arg(long, short)]
         force: bool,
+
+        /// Save TARGET env by resolving it from SOURCE env at session start.
+        #[arg(long = "from-env", value_name = "TARGET=SOURCE")]
+        from_env: Vec<EnvMappingArg>,
+
+        /// Save a literal non-secret env value in the profile.
+        #[arg(long = "set-env", value_name = "NAME=VALUE")]
+        set_env: Vec<EnvMappingArg>,
     },
 
     /// Switch a tool to a saved profile.
@@ -141,6 +150,31 @@ enum ToolArg {
     Cursor,
 }
 
+#[derive(Clone, Debug)]
+struct EnvMappingArg {
+    name: String,
+    value: String,
+}
+
+impl FromStr for EnvMappingArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let Some((name, mapped_value)) = value.split_once('=') else {
+            return Err("expected NAME=VALUE".to_owned());
+        };
+
+        if name.is_empty() || mapped_value.is_empty() {
+            return Err("expected NAME=VALUE with both sides set".to_owned());
+        }
+
+        Ok(Self {
+            name: name.to_owned(),
+            value: mapped_value.to_owned(),
+        })
+    }
+}
+
 impl From<ToolArg> for Tool {
     fn from(value: ToolArg) -> Self {
         match value {
@@ -159,9 +193,21 @@ pub fn run() -> Result<()> {
             tool,
             profile,
             force,
+            from_env,
+            set_env,
         } => {
+            let tool = Tool::from(tool);
             let store = ProfileStore::new()?;
-            let result = store.save(tool.into(), &profile, force)?;
+            let result = if from_env.is_empty() && set_env.is_empty() {
+                if tool == Tool::Claude {
+                    bail!(
+                        "Claude profiles are env-based; pass --from-env TARGET=SOURCE or --set-env NAME=VALUE"
+                    );
+                }
+                store.save(tool, &profile, force)?
+            } else {
+                store.save_env(tool, &profile, force, env_profile_spec(from_env, set_env)?)?
+            };
             print_save_result(&result);
         }
         Command::Use { tool, profile } => {
@@ -272,8 +318,27 @@ pub fn run() -> Result<()> {
 
 fn print_save_result(result: &SaveResult) {
     println!("saved {} profile '{}'", result.tool.key(), result.profile);
-    println!("  source      {}", result.source.display());
+    match &result.source {
+        Some(source) => println!("  source      {}", source.display()),
+        None => println!("  source      environment"),
+    }
     println!("  destination {}", result.destination.display());
+}
+
+fn env_profile_spec(
+    from_env: Vec<EnvMappingArg>,
+    set_env: Vec<EnvMappingArg>,
+) -> Result<EnvProfileSpec> {
+    Ok(EnvProfileSpec::new(
+        from_env
+            .into_iter()
+            .map(|mapping| EnvProfileMapping::new(mapping.name, mapping.value))
+            .collect(),
+        set_env
+            .into_iter()
+            .map(|mapping| EnvProfileMapping::new(mapping.name, mapping.value))
+            .collect(),
+    ))
 }
 
 fn print_use_result(result: &UseResult) {

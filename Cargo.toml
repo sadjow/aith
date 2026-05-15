@@ -10,6 +10,8 @@ repository = "https://github.com/sadjow/aith"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [dev-dependencies]
 assert_cmd = "2"

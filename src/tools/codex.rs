@@ -38,7 +38,7 @@ pub(crate) fn save(store: &ProfileStore, profile: &str, force: bool) -> Result<S
     Ok(SaveResult {
         tool: Tool::Codex,
         profile: profile.to_owned(),
-        source,
+        source: Some(source),
         destination,
     })
 }

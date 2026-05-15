@@ -65,7 +65,7 @@ pub fn diagnose(store: &ProfileStore, tools: &[Tool]) -> Result<DoctorReport> {
 fn diagnose_tool(store: &ProfileStore, tool: Tool) -> Result<ToolDoctor> {
     match tool {
         Tool::Codex => diagnose_codex(store),
-        Tool::Claude => Ok(diagnose_claude()),
+        Tool::Claude => diagnose_claude(store),
         Tool::Cursor => Ok(diagnose_unsupported(tool)),
     }
 }
@@ -122,9 +122,12 @@ fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
     })
 }
 
-fn diagnose_claude() -> ToolDoctor {
+fn diagnose_claude(store: &ProfileStore) -> Result<ToolDoctor> {
     let tool = Tool::Claude;
     let status = tool.inspect();
+    let profiles = store.list(tool)?;
+    let backups = store.backups(tool)?;
+    let current = DoctorCurrent::from(store.current(tool)?.state);
     let mut findings = Vec::new();
     let has_terminal_auth_env = claude::has_terminal_auth_env();
     let has_path_credentials =
@@ -156,16 +159,30 @@ fn diagnose_claude() -> ToolDoctor {
         ));
     }
 
+    if profiles.is_empty() {
+        findings.push(DoctorFinding::info(
+            "no Claude env profiles are saved; run `aith save claude <profile> --from-env ANTHROPIC_API_KEY=SOURCE_ENV` to create one",
+        ));
+    } else {
+        findings.push(DoctorFinding::info(
+            "Claude env session profiles are available for exec and shell",
+        ));
+    }
+
     findings.push(DoctorFinding::warning(
-        "Claude Code profile switching is not implemented yet; discovery only",
+        "Claude global login switching is not implemented; env profiles support exec and shell only",
     ));
 
-    ToolDoctor {
+    Ok(ToolDoctor {
         tool,
         status,
-        profiles: DoctorProfileSummary::Unsupported,
+        profiles: DoctorProfileSummary::Supported {
+            profile_count: profiles.len(),
+            backup_count: backups.len(),
+            current,
+        },
         findings,
-    }
+    })
 }
 
 fn diagnose_unsupported(tool: Tool) -> ToolDoctor {

@@ -7,8 +7,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::paths::aith_data_dir;
 use crate::profiles::{
-    BackupEntry, CurrentResult, ExecResult, RemoveResult, RestoreResult, SaveResult, ShellResult,
-    UseResult, validate_backup_id, validate_profile_name,
+    BackupEntry, CurrentResult, CurrentState, EnvProfileSpec, ExecResult, RemoveResult,
+    RestoreResult, SaveResult, ShellResult, UseResult, validate_backup_id, validate_profile_name,
 };
 use crate::tools::{self, Tool};
 
@@ -40,6 +40,24 @@ impl ProfileStore {
         }
     }
 
+    pub fn save_env(
+        &self,
+        tool: Tool,
+        profile: &str,
+        force: bool,
+        spec: EnvProfileSpec,
+    ) -> Result<SaveResult> {
+        validate_profile_name(profile)?;
+
+        match tool {
+            Tool::Claude => tools::claude::save(self, profile, force, spec),
+            Tool::Codex | Tool::Cursor => bail!(
+                "{} does not support env-based profiles",
+                tool.display_name()
+            ),
+        }
+    }
+
     pub fn use_profile(&self, tool: Tool, profile: &str) -> Result<UseResult> {
         validate_profile_name(profile)?;
 
@@ -52,14 +70,19 @@ impl ProfileStore {
     pub fn list(&self, tool: Tool) -> Result<Vec<String>> {
         match tool {
             Tool::Codex => tools::codex::list(self),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => tools::claude::list(self),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
     pub fn current(&self, tool: Tool) -> Result<CurrentResult> {
         match tool {
             Tool::Codex => tools::codex::current(self),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => Ok(CurrentResult {
+                tool,
+                state: CurrentState::Unknown,
+            }),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
@@ -68,14 +91,16 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => tools::codex::remove(self, profile, force),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => tools::claude::remove(self, profile),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
     pub fn backups(&self, tool: Tool) -> Result<Vec<BackupEntry>> {
         match tool {
             Tool::Codex => tools::codex::backups(self),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => Ok(Vec::new()),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
@@ -102,7 +127,8 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => tools::codex::exec(self, profile, command),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => tools::claude::exec(self, profile, command),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
@@ -111,7 +137,8 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => tools::codex::shell(self, profile),
-            Tool::Claude | Tool::Cursor => unsupported(tool),
+            Tool::Claude => tools::claude::shell(self, profile),
+            Tool::Cursor => unsupported(tool),
         }
     }
 
