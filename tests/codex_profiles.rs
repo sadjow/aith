@@ -317,6 +317,71 @@ fn shell_propagates_shell_exit_status() {
         .code(9);
 }
 
+#[test]
+fn doctor_reports_ready_codex_profile_state() {
+    let env = TestEnv::new();
+    env.write_auth("work");
+
+    env.command()
+        .args(["save", "codex", "work"])
+        .assert()
+        .success();
+
+    env.command()
+        .args(["doctor", "codex"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "aith store {}",
+            env.aith_home.display()
+        )))
+        .stdout(predicate::str::contains("Codex (codex)"))
+        .stdout(predicate::str::contains("auth file"))
+        .stdout(predicate::str::contains("profiles          1"))
+        .stdout(predicate::str::contains("backups           0"))
+        .stdout(predicate::str::contains("current           work"))
+        .stdout(predicate::str::contains(
+            "ok                Codex profile switching is ready",
+        ));
+}
+
+#[test]
+fn doctor_warns_when_codex_auth_and_profiles_are_missing() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args(["doctor", "codex"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("auth file"))
+        .stdout(predicate::str::contains("missing"))
+        .stdout(predicate::str::contains("profiles          0"))
+        .stdout(predicate::str::contains("current           unknown"))
+        .stdout(predicate::str::contains(
+            "warning           active Codex auth file is missing",
+        ))
+        .stdout(predicate::str::contains(
+            "warning           no Codex profiles are saved",
+        ));
+}
+
+#[test]
+fn doctor_reports_unsupported_tools() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args(["doctor", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Claude Code (claude)"))
+        .stdout(predicate::str::contains("profiles          unsupported"))
+        .stdout(predicate::str::contains("backups           unsupported"))
+        .stdout(predicate::str::contains("current           unsupported"))
+        .stdout(predicate::str::contains(
+            "warning           Claude Code profile switching is not implemented yet",
+        ));
+}
+
 fn shell_path(path: &Path) -> String {
     path.to_string_lossy().replace('\'', "'\\''")
 }

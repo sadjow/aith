@@ -3,6 +3,9 @@ use std::ffi::OsString;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::doctor::{
+    DoctorCurrent, DoctorProfileSummary, DoctorReport, DoctorSeverity, ToolDoctor,
+};
 use crate::profiles::{
     BackupEntry, CurrentResult, CurrentState, ProfileStore, RemoveResult, RestoreResult,
     SaveResult, UseResult,
@@ -116,6 +119,13 @@ enum Command {
     /// Show auth/config status for supported tools.
     Status {
         /// Limit the status output to one tool.
+        #[arg(value_enum)]
+        tool: Option<ToolArg>,
+    },
+
+    /// Diagnose auth/profile readiness without printing credentials.
+    Doctor {
+        /// Limit diagnostics to one tool.
         #[arg(value_enum)]
         tool: Option<ToolArg>,
     },
@@ -241,6 +251,15 @@ pub fn run() -> Result<()> {
                 print_status(&tool.inspect());
             }
         }
+        Command::Doctor { tool } => {
+            let tools = match tool {
+                Some(tool) => vec![tool.into()],
+                None => Tool::all().to_vec(),
+            };
+            let store = ProfileStore::new()?;
+            let report = crate::doctor::diagnose(&store, &tools)?;
+            print_doctor_report(&report);
+        }
         Command::Tools => {
             for tool in Tool::all() {
                 println!("{:<8} {}", tool.key(), tool.description());
@@ -309,7 +328,10 @@ fn print_current_result(result: &CurrentResult) {
 
 fn print_status(status: &ToolStatus) {
     println!("{} ({})", status.tool.display_name(), status.tool.key());
+    print_status_details(status);
+}
 
+fn print_status_details(status: &ToolStatus) {
     for check in &status.paths {
         let state = if check.exists { "found" } else { "missing" };
 
@@ -326,5 +348,62 @@ fn print_status(status: &ToolStatus) {
 
     for note in &status.notes {
         println!("  note              {note}");
+    }
+}
+
+fn print_doctor_report(report: &DoctorReport) {
+    println!("aith store {}", report.store_root.display());
+
+    for (index, tool) in report.tools.iter().enumerate() {
+        if index > 0 {
+            println!();
+        }
+
+        print_tool_doctor(tool);
+    }
+}
+
+fn print_tool_doctor(doctor: &ToolDoctor) {
+    println!("{} ({})", doctor.tool.display_name(), doctor.tool.key());
+    print_status_details(&doctor.status);
+
+    match &doctor.profiles {
+        DoctorProfileSummary::Supported {
+            profile_count,
+            backup_count,
+            current,
+        } => {
+            println!("  profiles          {profile_count}");
+            println!("  backups           {backup_count}");
+            println!("  current           {}", format_doctor_current(current));
+        }
+        DoctorProfileSummary::Unsupported => {
+            println!("  profiles          unsupported");
+            println!("  backups           unsupported");
+            println!("  current           unsupported");
+        }
+    }
+
+    for finding in &doctor.findings {
+        println!(
+            "  {:<18}{}",
+            doctor_severity_label(&finding.severity),
+            finding.message
+        );
+    }
+}
+
+fn format_doctor_current(current: &DoctorCurrent) -> String {
+    match current {
+        DoctorCurrent::Known(profile) => profile.to_owned(),
+        DoctorCurrent::Ambiguous(profiles) => format!("ambiguous ({})", profiles.join(", ")),
+        DoctorCurrent::Unknown => "unknown".to_owned(),
+    }
+}
+
+fn doctor_severity_label(severity: &DoctorSeverity) -> &'static str {
+    match severity {
+        DoctorSeverity::Ok => "ok",
+        DoctorSeverity::Warning => "warning",
     }
 }

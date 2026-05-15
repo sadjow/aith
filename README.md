@@ -13,6 +13,7 @@ stores its active auth state in a local `auth.json` file.
 Implemented:
 
 - Tool status checks for Codex, Claude Code, and Cursor.
+- Read-only doctor diagnostics for auth/profile readiness.
 - Codex profile save/list/current/use/remove.
 - Codex backup list/restore.
 - Codex one-command temporary profile execution.
@@ -45,6 +46,7 @@ Inspect and switch Codex profiles:
 ```sh
 cargo run -- list codex
 cargo run -- current codex
+cargo run -- doctor codex
 cargo run -- use codex personal
 ```
 
@@ -94,6 +96,22 @@ aith status codex
 aith status claude
 aith status cursor
 ```
+
+### Doctor
+
+Show a read-only diagnostic report for tool auth paths, relevant environment
+variables, saved profile counts, backup counts, and current profile detection.
+Credential file contents are never printed.
+
+```sh
+aith doctor
+aith doctor codex
+aith doctor claude
+aith doctor cursor
+```
+
+For tools whose profile switching is not implemented yet, `doctor` still reports
+safe path/env status and marks profile operations as unsupported.
 
 ### Save
 
@@ -267,7 +285,8 @@ are written with `0600` permissions.
 
 ## Safety Model
 
-- Credential file contents are never printed by status/current/list commands.
+- Credential file contents are never printed by status/doctor/current/list
+  commands.
 - Profile names are limited to ASCII letters, numbers, `-`, and `_`.
 - `use` and `restore` create a backup before replacing active Codex auth.
 - `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex
@@ -309,6 +328,7 @@ and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
 ## Project Structure
 
 - `src/cli.rs`: command parsing and user-facing output.
+- `src/doctor.rs`: read-only diagnostic report generation.
 - `src/profiles/`: shared profile storage, result types, validation, backups,
   and filesystem safety helpers.
 - `src/tools/`: tool metadata and tool-specific adapters.
