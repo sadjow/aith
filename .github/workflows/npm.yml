@@ -1,0 +1,75 @@
+name: Publish npm package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: GitHub Release tag to publish from
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PACKAGE_NAME: "@sadjow/aith"
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate npm token
+        if: ${{ env.NODE_AUTH_TOKEN == '' }}
+        run: |
+          echo "NPM_TOKEN is not configured."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          registry-url: https://registry.npmjs.org
+
+      - name: Download npm release package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist npm-src
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "aith-npm-package.tar.gz" \
+            --dir dist
+          tar -xzf dist/aith-npm-package.tar.gz -C npm-src
+
+      - name: Apply npm scope
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+
+          const packageName = process.env.PACKAGE_NAME;
+          const packageJsonPath = "npm-src/package/package.json";
+          const shrinkwrapPath = "npm-src/package/npm-shrinkwrap.json";
+
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+          packageJson.name = packageName;
+          fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+          if (fs.existsSync(shrinkwrapPath)) {
+            const shrinkwrap = JSON.parse(fs.readFileSync(shrinkwrapPath, "utf8"));
+            shrinkwrap.name = packageName;
+            if (shrinkwrap.packages && shrinkwrap.packages[""]) {
+              shrinkwrap.packages[""].name = packageName;
+            }
+            fs.writeFileSync(shrinkwrapPath, `${JSON.stringify(shrinkwrap, null, 2)}\n`);
+          }
+          NODE
+
+      - name: Check package contents
+        run: npm pack --dry-run ./npm-src/package
+
+      - name: Publish package
+        run: npm publish --access public ./npm-src/package

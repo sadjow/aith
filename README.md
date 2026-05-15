@@ -79,7 +79,7 @@ After public releases are available:
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/sadjow/aith/releases/download/v0.1.0/aith-installer.sh | sh
 brew install sadjow/tap/aith
-npm install aith@0.1.0
+npm install @sadjow/aith@0.1.0
 cargo install aith --locked
 nix run github:sadjow/aith
 ```
