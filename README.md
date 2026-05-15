@@ -66,6 +66,25 @@ cargo run -- status
 cargo run -- status codex-desktop
 ```
 
+## Installation
+
+While the repository is private, install from GitHub with SSH access:
+
+```sh
+cargo install --git git@github.com:sadjow/aith.git --locked
+```
+
+After public releases are available:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/sadjow/aith/releases/download/v0.1.0/aith-installer.sh | sh
+brew install sadjow/tap/aith
+cargo install aith --locked
+nix run github:sadjow/aith
+```
+
+Release process details live in [docs/releasing.md](docs/releasing.md).
+
 Save the current Codex CLI login as a profile:
 
 ```sh
@@ -536,6 +555,8 @@ devenv shell ci
 
 The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
 `devenv.nix`.
+
+Release automation uses `cargo-dist` through [dist-workspace.toml](dist-workspace.toml).
 
 ## Project Structure
 
