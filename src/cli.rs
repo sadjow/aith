@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::profiles::{ProfileStore, SaveResult, UseResult};
+use crate::profiles::{CurrentResult, CurrentState, ProfileStore, SaveResult, UseResult};
 use crate::tools::{Tool, ToolStatus};
 
 #[derive(Debug, Parser)]
@@ -42,6 +42,13 @@ enum Command {
     /// List saved profiles.
     List {
         /// Tool whose profiles should be listed.
+        #[arg(value_enum)]
+        tool: ToolArg,
+    },
+
+    /// Show which saved profile matches the active auth state.
+    Current {
+        /// Tool whose active profile should be detected.
         #[arg(value_enum)]
         tool: ToolArg,
     },
@@ -109,6 +116,11 @@ pub fn run() -> Result<()> {
                 }
             }
         }
+        Command::Current { tool } => {
+            let store = ProfileStore::new()?;
+            let result = store.current(tool.into())?;
+            print_current_result(&result);
+        }
         Command::Status { tool } => {
             let tools = match tool {
                 Some(tool) => vec![tool.into()],
@@ -150,6 +162,17 @@ fn print_use_result(result: &UseResult) {
 
     if let Some(backup) = &result.backup {
         println!("  backup      {}", backup.display());
+    }
+}
+
+fn print_current_result(result: &CurrentResult) {
+    match &result.state {
+        CurrentState::Known(profile) => println!("{}: {profile}", result.tool.key()),
+        CurrentState::Ambiguous(profiles) => {
+            println!("{}: ambiguous", result.tool.key());
+            println!("  matches {}", profiles.join(", "));
+        }
+        CurrentState::Unknown => println!("{}: unknown", result.tool.key()),
     }
 }
 

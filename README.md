@@ -14,6 +14,7 @@ aith status codex
 aith save codex work
 aith add codex personal
 aith list codex
+aith current codex
 aith use codex work
 ```
 

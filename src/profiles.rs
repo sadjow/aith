@@ -31,6 +31,19 @@ pub struct UseResult {
     pub backup: Option<PathBuf>,
 }
 
+#[derive(Debug)]
+pub struct CurrentResult {
+    pub tool: Tool,
+    pub state: CurrentState,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum CurrentState {
+    Known(String),
+    Ambiguous(Vec<String>),
+    Unknown,
+}
+
 impl ProfileStore {
     pub fn new() -> Result<Self> {
         let root = aith_data_dir().context("could not determine aith data directory")?;
@@ -62,6 +75,13 @@ impl ProfileStore {
     pub fn list(&self, tool: Tool) -> Result<Vec<String>> {
         match tool {
             Tool::Codex => self.list_tool_profiles(tool),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn current(&self, tool: Tool) -> Result<CurrentResult> {
+        match tool {
+            Tool::Codex => self.current_codex(),
             Tool::Claude | Tool::Cursor => unsupported(tool),
         }
     }
@@ -144,6 +164,40 @@ impl ProfileStore {
 
         profiles.sort();
         Ok(profiles)
+    }
+
+    fn current_codex(&self) -> Result<CurrentResult> {
+        let active = codex_auth_path()?;
+        if !active.is_file() {
+            return Ok(CurrentResult {
+                tool: Tool::Codex,
+                state: CurrentState::Unknown,
+            });
+        }
+
+        let active_auth = fs::read(&active)
+            .with_context(|| format!("failed to read active Codex auth at {}", active.display()))?;
+
+        let mut matches = Vec::new();
+        for profile in self.list_tool_profiles(Tool::Codex)? {
+            let profile_auth_path = self.profile_auth_path(Tool::Codex, &profile);
+            let profile_auth = fs::read(&profile_auth_path).with_context(|| {
+                format!(
+                    "failed to read saved Codex profile '{}' at {}",
+                    profile,
+                    profile_auth_path.display()
+                )
+            })?;
+
+            if profile_auth == active_auth {
+                matches.push(profile);
+            }
+        }
+
+        Ok(CurrentResult {
+            tool: Tool::Codex,
+            state: current_state(matches),
+        })
     }
 
     fn profile_auth_path(&self, tool: Tool, profile: &str) -> PathBuf {
@@ -308,9 +362,17 @@ fn unsupported<T>(tool: Tool) -> Result<T> {
     );
 }
 
+fn current_state(matches: Vec<String>) -> CurrentState {
+    match matches.len() {
+        0 => CurrentState::Unknown,
+        1 => CurrentState::Known(matches.into_iter().next().expect("one profile match")),
+        _ => CurrentState::Ambiguous(matches),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::validate_profile_name;
+    use super::{CurrentState, current_state, validate_profile_name};
 
     #[test]
     fn accepts_simple_profile_names() {
@@ -327,5 +389,18 @@ mod tests {
         assert!(validate_profile_name("client.a").is_err());
         assert!(validate_profile_name("client/a").is_err());
         assert!(validate_profile_name("client a").is_err());
+    }
+
+    #[test]
+    fn reports_current_state_from_profile_matches() {
+        assert_eq!(current_state(Vec::new()), CurrentState::Unknown);
+        assert_eq!(
+            current_state(vec!["work".to_owned()]),
+            CurrentState::Known("work".to_owned())
+        );
+        assert_eq!(
+            current_state(vec!["personal".to_owned(), "work".to_owned()]),
+            CurrentState::Ambiguous(vec!["personal".to_owned(), "work".to_owned()])
+        );
     }
 }
