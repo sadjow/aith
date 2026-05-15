@@ -26,14 +26,16 @@ GitHub token with contents read/write access to `sadjow/homebrew-tap`, then set:
 gh secret set HOMEBREW_TAP_TOKEN --repo sadjow/aith
 ```
 
-To let release CI publish to crates.io, create a crates.io API token, then set:
+To let release CI publish to crates.io, verify the email address on the
+crates.io account first. Then create a crates.io API token and set:
 
 ```sh
 gh secret set CARGO_REGISTRY_TOKEN --repo sadjow/aith
 ```
 
-To let release CI publish the npm installer package, create an npm automation
-token for the `@sadjow` scope, then set:
+To let release CI publish the npm installer package, create an npm granular
+access token for the `@sadjow` scope with publish access and 2FA bypass enabled.
+Then set:
 
 ```sh
 gh secret set NPM_TOKEN --repo sadjow/aith
@@ -43,10 +45,14 @@ Do not store a broad personal GitHub token in repository secrets.
 
 `HOMEBREW_TAP_TOKEN` and `NPM_TOKEN` are required before pushing a release tag
 because the release workflow includes Homebrew and scoped npm publish jobs.
+If npm returns `EOTP`, replace `NPM_TOKEN` with a granular token that can bypass
+2FA for publishing.
 
 `CARGO_REGISTRY_TOKEN` is required for crates.io publishing. Without it, the
 GitHub Release can still complete, but the `Publish crate` workflow will skip
 crates.io.
+If crates.io returns a verified-email error, verify the account email on
+crates.io and rerun the workflow.
 
 ## Preflight
 
