@@ -5,29 +5,202 @@
 The goal is to make work, personal, and client identities explicit across tools
 like Claude Code, Codex, and Cursor without repeated logout/login flows.
 
-## Current commands
+## Status
+
+`aith` is early. Codex profile management is implemented first because Codex
+stores its active auth state in a local `auth.json` file.
+
+Implemented:
+
+- Tool status checks for Codex, Claude Code, and Cursor.
+- Codex profile save/list/current/use/remove.
+- Automatic backup before replacing active Codex auth.
+- Private Unix permissions for stored profile directories and auth files.
+
+Not implemented yet:
+
+- Claude Code profile switching.
+- Cursor profile switching.
+- One-command or shell-scoped temporary profiles.
+- Backup listing and restore commands.
+
+## Quick Start
+
+Use `devenv` to enter the pinned Rust development environment:
+
+```sh
+devenv shell
+cargo run -- status
+```
+
+Save the current Codex login as a profile:
+
+```sh
+cargo run -- save codex personal
+```
+
+Inspect and switch Codex profiles:
+
+```sh
+cargo run -- list codex
+cargo run -- current codex
+cargo run -- use codex personal
+```
+
+Remove a saved Codex profile:
+
+```sh
+cargo run -- remove codex old-client
+```
+
+## Commands
+
+### Tools
+
+List supported tools:
 
 ```sh
 aith tools
+```
+
+### Status
+
+Show safe auth/config status. This checks whether expected files and
+environment variables exist, but does not print credential values.
+
+```sh
 aith status
 aith status codex
-aith save codex work
-aith add codex personal
+aith status claude
+aith status cursor
+```
+
+### Save
+
+Save the current auth state as a named profile.
+
+```sh
+aith save codex personal
+```
+
+`add` is an alias for `save`:
+
+```sh
+aith add codex work
+```
+
+Profiles can be overwritten explicitly:
+
+```sh
+aith save codex personal --force
+```
+
+### List
+
+List saved profiles for a tool:
+
+```sh
 aith list codex
+```
+
+### Current
+
+Detect which saved profile matches the active auth state:
+
+```sh
 aith current codex
-aith use codex work
+```
+
+Possible outputs:
+
+```text
+codex: personal
+codex: unknown
+codex: ambiguous
+  matches personal, duplicate
+```
+
+`ambiguous` means more than one saved profile has the same auth snapshot.
+
+### Use
+
+Switch a tool to a saved profile:
+
+```sh
+aith use codex personal
+```
+
+For Codex, this replaces the active `auth.json` with the saved profile snapshot.
+The previous active `auth.json` is backed up first.
+
+### Remove
+
+Remove a saved profile:
+
+```sh
 aith remove codex old-client
 ```
+
+By default, `remove` refuses to delete a profile that matches the active auth
+state:
+
+```text
+Error: profile 'personal' is currently active for codex; pass --force to remove it
+```
+
+Force removal when you intentionally want to delete the saved profile:
+
+```sh
+aith remove codex personal --force
+```
+
+This removes only the saved profile directory. It does not touch active Codex
+auth and does not delete backups.
+
+## Storage
+
+Profiles are stored under `AITH_HOME` when it is set. Otherwise, `aith` uses the
+platform data directory:
+
+- macOS: `~/Library/Application Support/aith`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/aith`
+- Windows: `%LOCALAPPDATA%\aith`
+
+Codex profiles are stored as:
+
+```text
+profiles/codex/<profile>/auth.json
+```
+
+Codex backups are stored as:
+
+```text
+backups/codex/auth-<timestamp>-<pid>.json
+```
+
+On Unix, profile directories are created with `0700` permissions and auth files
+are written with `0600` permissions.
+
+## Safety Model
+
+- Credential file contents are never printed by status/current/list commands.
+- Profile names are limited to ASCII letters, numbers, `-`, and `_`.
+- `use` creates a backup before replacing active Codex auth.
+- `remove` refuses to delete the active matching profile unless `--force` is
+  passed.
+- Claude Code and Cursor profile switching intentionally return “not implemented
+  yet” until their auth models are handled explicitly.
 
 ## Development
 
 This project uses [devenv](https://devenv.sh/) to provide a pinned Rust
-toolchain.
+toolchain matching `rust-version` in `Cargo.toml`.
 
 ```sh
 devenv shell
 cargo check
 cargo test
+cargo run -- status
 ```
 
 Common one-off checks can run without entering an interactive shell:
@@ -40,28 +213,18 @@ devenv shell -- tests
 devenv shell -- ci
 ```
 
-## Planned commands
+## Planned Commands
 
 ```sh
 aith exec cursor work -- cursor agent
 aith shell codex client-a
+aith backups codex
+aith restore codex <backup-id>
 ```
 
-## Design direction
+## Design Direction
 
 - Local-first: credentials never leave the machine.
 - Tool-native: use each upstream tool's supported auth and config mechanisms.
 - Explicit: profile switches should be visible and reversible.
 - Session-friendly: support one-command and shell-scoped temporary identities.
-
-## Storage
-
-Profiles are stored under `AITH_HOME` when it is set. Otherwise, `aith` uses the
-platform data directory:
-
-- macOS: `~/Library/Application Support/aith`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/aith`
-- Windows: `%LOCALAPPDATA%\aith`
-
-Codex profile switching currently snapshots and restores `auth.json` only. The
-active auth file is backed up before `aith use codex <profile>` replaces it.
