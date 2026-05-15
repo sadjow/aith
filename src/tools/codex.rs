@@ -8,8 +8,9 @@ use anyhow::{Context, Result, bail};
 use crate::paths::env_path_or_home;
 use crate::profiles::{
     BackupEntry, CurrentResult, CurrentState, ExecResult, ProfileStore, RemoveResult,
-    RestoreResult, SaveResult, TempDir, UseResult, copy_file_private, create_private_dir_all,
-    current_state, ensure_file_exists, ensure_removable_profile, parent_dir, status_code,
+    RestoreResult, SaveResult, ShellResult, TempDir, UseResult, copy_file_private,
+    create_private_dir_all, current_state, ensure_file_exists, ensure_removable_profile,
+    parent_dir, status_code,
 };
 use crate::tools::{Tool, ToolStatus};
 
@@ -149,28 +150,31 @@ pub(crate) fn exec(
     profile: &str,
     command: &[OsString],
 ) -> Result<ExecResult> {
-    let source = store.profile_file_path(Tool::Codex, profile, AUTH_FILE);
-    ensure_file_exists(&source, "saved Codex auth profile")?;
-
-    let temp_dir = TempDir::create("aith-codex")?;
-    let temp_codex_home = temp_dir.path();
-
-    copy_file_private(&source, &temp_codex_home.join(AUTH_FILE))
-        .with_context(|| format!("failed to stage Codex profile '{}'", profile))?;
-
-    let config_path = active_config_path()?;
-    if config_path.is_file() {
-        copy_file_private(&config_path, &temp_codex_home.join(CONFIG_FILE))
-            .context("failed to stage Codex config")?;
-    }
+    let session = CodexSession::stage(store, profile)?;
 
     let status = Command::new(&command[0])
         .args(&command[1..])
-        .env("CODEX_HOME", temp_codex_home)
+        .env("CODEX_HOME", session.home())
         .status()
         .with_context(|| format!("failed to run command '{}'", command[0].to_string_lossy()))?;
 
     Ok(ExecResult {
+        status_code: status_code(status),
+    })
+}
+
+pub(crate) fn shell(store: &ProfileStore, profile: &str) -> Result<ShellResult> {
+    let session = CodexSession::stage(store, profile)?;
+    let shell = user_shell();
+
+    let status = Command::new(&shell)
+        .env("CODEX_HOME", session.home())
+        .env("AITH_TOOL", Tool::Codex.key())
+        .env("AITH_PROFILE", profile)
+        .status()
+        .with_context(|| format!("failed to start shell '{}'", shell.to_string_lossy()))?;
+
+    Ok(ShellResult {
         status_code: status_code(status),
     })
 }
@@ -193,6 +197,36 @@ pub(crate) fn inspect() -> ToolStatus {
         ],
         env: super::env_checks(&["CODEX_HOME", "OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"]),
         notes: vec!["checks file presence only; credential contents are never read"],
+    }
+}
+
+#[derive(Debug)]
+struct CodexSession {
+    temp_dir: TempDir,
+}
+
+impl CodexSession {
+    fn stage(store: &ProfileStore, profile: &str) -> Result<Self> {
+        let source = store.profile_file_path(Tool::Codex, profile, AUTH_FILE);
+        ensure_file_exists(&source, "saved Codex auth profile")?;
+
+        let temp_dir = TempDir::create("aith-codex")?;
+        let home = temp_dir.path();
+
+        copy_file_private(&source, &home.join(AUTH_FILE))
+            .with_context(|| format!("failed to stage Codex profile '{}'", profile))?;
+
+        let config_path = active_config_path()?;
+        if config_path.is_file() {
+            copy_file_private(&config_path, &home.join(CONFIG_FILE))
+                .context("failed to stage Codex config")?;
+        }
+
+        Ok(Self { temp_dir })
+    }
+
+    fn home(&self) -> &Path {
+        self.temp_dir.path()
     }
 }
 
@@ -223,4 +257,16 @@ fn active_config_dir() -> Result<PathBuf> {
 
 fn config_dir() -> Option<PathBuf> {
     env_path_or_home("CODEX_HOME", ".codex")
+}
+
+fn user_shell() -> OsString {
+    #[cfg(windows)]
+    {
+        std::env::var_os("COMSPEC").unwrap_or_else(|| OsString::from("cmd.exe"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/sh"))
+    }
 }

@@ -16,6 +16,7 @@ Implemented:
 - Codex profile save/list/current/use/remove.
 - Codex backup list/restore.
 - Codex one-command temporary profile execution.
+- Codex shell-scoped temporary profile sessions.
 - Automatic backup before replacing active Codex auth.
 - Private Unix permissions for stored profile directories and auth files.
 
@@ -23,7 +24,6 @@ Not implemented yet:
 
 - Claude Code profile switching.
 - Cursor profile switching.
-- Shell-scoped temporary profiles.
 
 ## Quick Start
 
@@ -59,6 +59,12 @@ Run one command with a saved Codex profile without switching your active login:
 
 ```sh
 cargo run -- exec codex personal -- codex
+```
+
+Start a shell with a saved Codex profile without switching your active login:
+
+```sh
+cargo run -- shell codex personal
 ```
 
 Remove a saved Codex profile:
@@ -219,6 +225,22 @@ The active Codex auth file is not modified, and the temporary directory is
 removed after the command exits. `aith exec` exits with the same status code as
 the child command.
 
+### Shell
+
+Start a shell with a temporary profile-scoped auth environment:
+
+```sh
+aith shell codex personal
+```
+
+For Codex, `shell` stages the selected profile exactly like `exec`, then starts
+your configured shell with `CODEX_HOME` pointing at the temporary profile home.
+This lets separate terminal tabs use different Codex profiles at the same time.
+
+The active Codex auth file is not modified, and the temporary directory is
+removed when the shell exits. `aith shell` exits with the same status code as
+the shell.
+
 ## Storage
 
 Profiles are stored under `AITH_HOME` when it is set. Otherwise, `aith` uses the
@@ -250,6 +272,8 @@ are written with `0600` permissions.
 - `use` and `restore` create a backup before replacing active Codex auth.
 - `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex
   auth.
+- `shell` starts a temporary `CODEX_HOME` session and does not modify active
+  Codex auth.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
 - `restore` only accepts generated backup IDs in the form
@@ -293,7 +317,6 @@ and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
 ## Planned Commands
 
 ```sh
-aith shell codex client-a
 aith exec cursor work -- cursor agent
 ```
 

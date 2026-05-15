@@ -96,6 +96,16 @@ enum Command {
         command: Vec<OsString>,
     },
 
+    /// Start a shell with a temporary profile-scoped auth environment.
+    Shell {
+        /// Tool whose profile should be used.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Profile name to use for this shell session.
+        profile: String,
+    },
+
     /// Show which saved profile matches the active auth state.
     Current {
         /// Tool whose active profile should be detected.
@@ -202,6 +212,14 @@ pub fn run() -> Result<()> {
         } => {
             let store = ProfileStore::new()?;
             let result = store.exec_profile(tool.into(), &profile, &command)?;
+            std::process::exit(result.status_code);
+        }
+        Command::Shell { tool, profile } => {
+            let tool = Tool::from(tool);
+            let store = ProfileStore::new()?;
+            eprintln!("starting {} shell with profile '{}'", tool.key(), profile);
+            eprintln!("exit the shell to end the temporary session");
+            let result = store.shell_profile(tool, &profile)?;
             std::process::exit(result.status_code);
         }
         Command::Current { tool } => {

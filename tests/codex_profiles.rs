@@ -255,6 +255,84 @@ fn exec_propagates_child_exit_status() {
         .code(7);
 }
 
+#[test]
+fn shell_uses_temporary_codex_home_and_preserves_active_auth() {
+    let env = TestEnv::new();
+    env.write_auth("work");
+    env.write_config("model = \"test-model\"\n");
+
+    env.command()
+        .args(["save", "codex", "work"])
+        .assert()
+        .success();
+
+    env.write_auth("personal");
+
+    let session_record = env.aith_home.join("shell-session");
+    let fake_shell = env.aith_home.join("fake-shell");
+    write_executable(
+        &fake_shell,
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n%s\\n%s\\n' \"$CODEX_HOME\" \"$AITH_TOOL\" \"$AITH_PROFILE\" > '{}'\ncat \"$CODEX_HOME/auth.json\"\ncat \"$CODEX_HOME/config.toml\"\n",
+            shell_path(&session_record)
+        ),
+    );
+
+    env.command()
+        .env("SHELL", &fake_shell)
+        .args(["shell", "codex", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("{\"account\":\"work\"}"))
+        .stdout(predicate::str::contains("model = \"test-model\""));
+
+    assert_eq!(env.read_auth(), "{\"account\":\"personal\"}\n");
+
+    let session = fs::read_to_string(session_record).expect("read shell session record");
+    let mut lines = session.lines();
+    let temp_home = lines.next().expect("temp home line");
+    assert_eq!(lines.next(), Some("codex"));
+    assert_eq!(lines.next(), Some("work"));
+    assert_ne!(Path::new(temp_home), env.codex_home.as_path());
+    assert!(!Path::new(temp_home).exists());
+}
+
+#[test]
+fn shell_propagates_shell_exit_status() {
+    let env = TestEnv::new();
+    env.write_auth("work");
+
+    env.command()
+        .args(["save", "codex", "work"])
+        .assert()
+        .success();
+
+    let fake_shell = env.aith_home.join("failing-shell");
+    write_executable(&fake_shell, "#!/bin/sh\nexit 9\n");
+
+    env.command()
+        .env("SHELL", &fake_shell)
+        .args(["shell", "codex", "work"])
+        .assert()
+        .code(9);
+}
+
 fn shell_path(path: &Path) -> String {
     path.to_string_lossy().replace('\'', "'\\''")
+}
+
+fn write_executable(path: &Path, contents: &str) {
+    fs::create_dir_all(path.parent().expect("script parent")).expect("create script parent");
+    fs::write(path, contents).expect("write executable script");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(path)
+            .expect("read script metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(path, permissions).expect("make script executable");
+    }
 }

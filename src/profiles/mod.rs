@@ -6,7 +6,7 @@ mod validation;
 pub use store::ProfileStore;
 pub use types::{
     BackupEntry, CurrentResult, CurrentState, ExecResult, RemoveResult, RestoreResult, SaveResult,
-    UseResult,
+    ShellResult, UseResult,
 };
 
 pub(crate) use fs::{

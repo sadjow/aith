@@ -7,8 +7,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::paths::aith_data_dir;
 use crate::profiles::{
-    BackupEntry, CurrentResult, ExecResult, RemoveResult, RestoreResult, SaveResult, UseResult,
-    validate_backup_id, validate_profile_name,
+    BackupEntry, CurrentResult, ExecResult, RemoveResult, RestoreResult, SaveResult, ShellResult,
+    UseResult, validate_backup_id, validate_profile_name,
 };
 use crate::tools::{self, Tool};
 
@@ -102,6 +102,15 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => tools::codex::exec(self, profile, command),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn shell_profile(&self, tool: Tool, profile: &str) -> Result<ShellResult> {
+        validate_profile_name(profile)?;
+
+        match tool {
+            Tool::Codex => tools::codex::shell(self, profile),
             Tool::Claude | Tool::Cursor => unsupported(tool),
         }
     }

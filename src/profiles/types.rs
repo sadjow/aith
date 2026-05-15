@@ -34,6 +34,11 @@ pub struct ExecResult {
 }
 
 #[derive(Debug)]
+pub struct ShellResult {
+    pub status_code: i32,
+}
+
+#[derive(Debug)]
 pub struct RemoveResult {
     pub tool: Tool,
     pub profile: String,
