@@ -325,6 +325,18 @@ devenv shell ci
 Integration tests run the real `aith` binary against temporary fake `AITH_HOME`
 and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
 
+## Continuous Integration
+
+GitHub Actions runs the same checks as the local CI script on pushes to `main`
+and pull requests:
+
+```sh
+devenv shell ci
+```
+
+The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
+`devenv.nix`.
+
 ## Project Structure
 
 - `src/cli.rs`: command parsing and user-facing output.
