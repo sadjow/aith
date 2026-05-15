@@ -10,3 +10,8 @@ repository = "https://github.com/sadjow/aith"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

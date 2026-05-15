@@ -279,6 +279,9 @@ devenv shell -- tests
 devenv shell -- ci
 ```
 
+Integration tests run the real `aith` binary against temporary fake `AITH_HOME`
+and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
+
 ## Planned Commands
 
 ```sh

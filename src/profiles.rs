@@ -80,6 +80,10 @@ impl ProfileStore {
         Ok(Self { root })
     }
 
+    pub fn with_root(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }
