@@ -106,6 +106,8 @@ impl TestEnv {
         command.env("CODEX_HOME", &self.codex_home);
         command.env("CLAUDE_CONFIG_DIR", &self.claude_config_dir);
         command.env("HOME", &self.home);
+        command.env("XDG_CONFIG_HOME", self.home.join(".config"));
+        command.env("APPDATA", self.home.join("AppData").join("Roaming"));
         for name in [
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_AUTH_TOKEN",
@@ -121,6 +123,19 @@ impl TestEnv {
             command.env_remove(name);
         }
         command
+    }
+
+    fn desktop_app_support(&self, app_name: &str) -> PathBuf {
+        if cfg!(target_os = "macos") {
+            self.home
+                .join("Library")
+                .join("Application Support")
+                .join(app_name)
+        } else if cfg!(target_os = "windows") {
+            self.home.join("AppData").join("Roaming").join(app_name)
+        } else {
+            self.home.join(".config").join(app_name)
+        }
     }
 }
 
@@ -240,6 +255,86 @@ fn canonical_tool_names_and_legacy_aliases_share_profiles() {
         .assert()
         .success()
         .stdout(predicate::str::contains("work"));
+}
+
+#[test]
+fn tools_lists_cli_agent_and_desktop_targets() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args(["tools"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("codex-cli"))
+        .stdout(predicate::str::contains("codex-desktop"))
+        .stdout(predicate::str::contains("claude-code"))
+        .stdout(predicate::str::contains("claude-desktop"))
+        .stdout(predicate::str::contains("cursor-agent"))
+        .stdout(predicate::str::contains("cursor-desktop"));
+}
+
+#[test]
+fn status_reports_desktop_targets_without_reading_credentials() {
+    let env = TestEnv::new();
+    let codex_support = env.desktop_app_support("Codex");
+    fs::create_dir_all(codex_support.join("Local Storage").join("leveldb"))
+        .expect("create codex local storage");
+    fs::create_dir_all(codex_support.join("Session Storage"))
+        .expect("create codex session storage");
+
+    env.command()
+        .args(["status", "codex-desktop"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Codex Desktop (codex-desktop)"))
+        .stdout(predicate::str::contains("app support"))
+        .stdout(predicate::str::contains("local storage"))
+        .stdout(predicate::str::contains("session storage"))
+        .stdout(predicate::str::contains(
+            "read-only desktop discovery; credential contents are never read",
+        ))
+        .stdout(predicate::str::contains(
+            "desktop app auth is tracked separately from Codex CLI auth",
+        ));
+}
+
+#[test]
+fn doctor_reports_desktop_targets_as_read_only_unsupported() {
+    let env = TestEnv::new();
+    let claude_support = env.desktop_app_support("Claude");
+    fs::create_dir_all(&claude_support).expect("create claude app support");
+    fs::write(claude_support.join("claude_desktop_config.json"), "{}\n")
+        .expect("write claude desktop config");
+
+    env.command()
+        .args(["doctor", "claude-desktop"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Claude Desktop (claude-desktop)",
+        ))
+        .stdout(predicate::str::contains("desktop config"))
+        .stdout(predicate::str::contains("profiles          unsupported"))
+        .stdout(predicate::str::contains("current           unsupported"))
+        .stdout(predicate::str::contains(
+            "info              Claude Desktop app data was found; auth stores are not inspected",
+        ))
+        .stdout(predicate::str::contains(
+            "warning           Claude Desktop profile switching is not implemented; read-only status and doctor are available",
+        ));
+}
+
+#[test]
+fn desktop_profile_operations_fail_with_read_only_message() {
+    let env = TestEnv::new();
+
+    env.command()
+        .args(["list", "cursor-desktop"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Cursor Desktop profile switching is not implemented; read-only status and doctor are available",
+        ));
 }
 
 #[test]

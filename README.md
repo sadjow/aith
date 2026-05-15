@@ -3,24 +3,27 @@
 `aith` is a native CLI for managing account profiles for AI coding tools.
 
 The goal is to make work, personal, and client identities explicit across tools
-like Codex CLI, Claude Code, and Cursor Agent without repeated logout/login
-flows.
+like Codex CLI, Codex Desktop, Claude Code, Claude Desktop, Cursor Agent, and
+Cursor Desktop without repeated logout/login flows.
 
 ## Supported Surfaces
 
 `aith` treats each auth surface separately. A terminal tool and a desktop app can
 be logged into different accounts, so they should not share one profile target.
 
-Current command keys target CLI/agent surfaces:
+Current command keys:
 
 - `codex-cli`: Codex CLI. Legacy alias: `codex`.
+- `codex-desktop`: Codex desktop app.
 - `claude-code`: Claude Code. Legacy alias: `claude`.
+- `claude-desktop`: Claude desktop app.
 - `cursor-agent`: Cursor Agent or terminal Cursor auth through `CURSOR_API_KEY`.
   Legacy alias: `cursor`.
+- `cursor-desktop`: Cursor desktop app.
 
-Desktop apps are not managed yet. Future support should use separate explicit
-targets such as `codex-desktop`, `claude-desktop`, or `cursor-desktop`, starting
-with read-only `status` and `doctor` discovery before any switching behavior.
+Desktop app targets are read-only today. They support `status` and `doctor`
+discovery, but profile switching is intentionally not implemented until their
+auth stores are understood well enough to mutate safely.
 
 ## Status
 
@@ -30,6 +33,8 @@ Codex CLI stores its active auth state in a local `auth.json` file.
 Implemented:
 
 - Tool status checks for Codex CLI, Claude Code, and Cursor Agent.
+- Read-only desktop app status checks for Codex Desktop, Claude Desktop, and
+  Cursor Desktop.
 - Read-only doctor diagnostics for auth/profile readiness.
 - Claude Code auth/config discovery.
 - Claude Code env-profile save/list/remove.
@@ -49,7 +54,7 @@ Not implemented yet:
 - Claude Code global login switching, including subscription/Keychain account
   switching.
 - Cursor Agent global login switching beyond terminal API-key sessions.
-- Desktop app auth discovery or switching for Codex, Claude, or Cursor.
+- Desktop app profile switching for Codex, Claude, or Cursor.
 
 ## Quick Start
 
@@ -58,6 +63,7 @@ Use `devenv` to enter the pinned Rust development environment:
 ```sh
 devenv shell
 cargo run -- status
+cargo run -- status codex-desktop
 ```
 
 Save the current Codex CLI login as a profile:
@@ -135,8 +141,11 @@ environment variables exist, but does not print credential values.
 ```sh
 aith status
 aith status codex-cli
+aith status codex-desktop
 aith status claude-code
+aith status claude-desktop
 aith status cursor-agent
+aith status cursor-desktop
 ```
 
 ### Doctor
@@ -148,13 +157,19 @@ Credential file contents are never printed.
 ```sh
 aith doctor
 aith doctor codex-cli
+aith doctor codex-desktop
 aith doctor claude-code
+aith doctor claude-desktop
 aith doctor cursor-agent
+aith doctor cursor-desktop
 ```
 
 For Claude Code and Cursor Agent, `doctor` reports both safe path/env status and
 saved env profiles. It still warns that global login switching is not
 implemented for those tools.
+
+For desktop app targets, `doctor` reports known app/data paths as read-only and
+marks profiles, backups, and current profile detection as unsupported.
 
 ### Save
 
@@ -207,6 +222,8 @@ aith list claude-code
 aith list cursor-agent
 ```
 
+Desktop app targets do not support saved profiles yet.
+
 ### Current
 
 Detect which saved profile matches the active auth state:
@@ -230,6 +247,8 @@ codex-cli: ambiguous
 profiles are session-scoped, so `aith current claude-code` and
 `aith current cursor-agent` report `unknown` instead of trying to infer a global
 active account.
+
+Desktop app targets do not support current profile detection yet.
 
 ### Use
 
@@ -440,6 +459,24 @@ Cursor Agent env profiles set terminal auth environment variables for
 `aith exec cursor-agent ...` and `aith shell cursor-agent ...` sessions. They do
 not modify Cursor user data or any global login state.
 
+## Desktop App Discovery
+
+`aith` tracks desktop apps separately from CLI and terminal agent targets:
+
+- `codex-desktop`
+- `claude-desktop`
+- `cursor-desktop`
+
+Desktop targets are read-only today. `aith status <desktop-target>` and
+`aith doctor <desktop-target>` check known app bundle, app support, settings,
+browser storage, and user-data paths without opening credential-bearing files or
+printing credential values.
+
+Desktop discovery intentionally does not inspect macOS Keychain, cookies,
+LevelDB, IndexedDB, SQLite databases, or app-managed session stores. Those
+stores may contain sensitive or app-version-specific auth state, so switching is
+blocked until each desktop auth model has a dedicated, reversible implementation.
+
 ## Safety Model
 
 - Credential file contents are never printed by status/doctor/current/list
@@ -454,8 +491,7 @@ not modify Cursor user data or any global login state.
   Secret values are resolved only when `exec` or `shell` starts.
 - Claude Code and Cursor Agent env sessions do not modify config files,
   credential files, user data, or macOS Keychain entries.
-- Desktop app auth stores are intentionally out of scope for current profile
-  operations.
+- Desktop app auth stores are read-only in current profile operations.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
 - `restore` only accepts generated backup IDs in the form
@@ -512,6 +548,7 @@ The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
   sessions.
 - `src/tools/codex.rs`: Codex CLI auth/profile behavior.
 - `src/tools/cursor.rs`: Cursor Agent auth discovery and env-profile sessions.
+- `src/tools/desktop.rs`: read-only desktop app discovery.
 - `src/tools/env_session.rs`: shared env-profile session behavior.
 
 ## Design Direction

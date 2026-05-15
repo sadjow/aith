@@ -65,8 +65,11 @@ pub fn diagnose(store: &ProfileStore, tools: &[Tool]) -> Result<DoctorReport> {
 fn diagnose_tool(store: &ProfileStore, tool: Tool) -> Result<ToolDoctor> {
     match tool {
         Tool::CodexCli => diagnose_codex(store),
+        Tool::CodexDesktop => Ok(diagnose_desktop(tool)),
         Tool::ClaudeCode => diagnose_claude(store),
+        Tool::ClaudeDesktop => Ok(diagnose_desktop(tool)),
         Tool::CursorAgent => diagnose_cursor(store),
+        Tool::CursorDesktop => Ok(diagnose_desktop(tool)),
     }
 }
 
@@ -223,6 +226,35 @@ fn diagnose_cursor(store: &ProfileStore) -> Result<ToolDoctor> {
         },
         findings,
     })
+}
+
+fn diagnose_desktop(tool: Tool) -> ToolDoctor {
+    let status = tool.inspect();
+    let mut findings = Vec::new();
+
+    if status.paths.iter().any(|check| check.exists) {
+        findings.push(DoctorFinding::info(format!(
+            "{} app data was found; auth stores are not inspected",
+            tool.display_name()
+        )));
+    } else {
+        findings.push(DoctorFinding::info(format!(
+            "{} was not detected in known desktop app paths",
+            tool.display_name()
+        )));
+    }
+
+    findings.push(DoctorFinding::warning(format!(
+        "{} profile switching is not implemented; read-only status and doctor are available",
+        tool.display_name()
+    )));
+
+    ToolDoctor {
+        tool,
+        status,
+        profiles: DoctorProfileSummary::Unsupported,
+        findings,
+    }
 }
 
 fn path_exists(status: &ToolStatus, label: &str) -> bool {

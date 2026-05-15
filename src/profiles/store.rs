@@ -36,6 +36,9 @@ impl ProfileStore {
 
         match tool {
             Tool::CodexCli => tools::codex::save(self, profile, force),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
             Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
@@ -52,10 +55,12 @@ impl ProfileStore {
         match tool {
             Tool::ClaudeCode => tools::claude::save(self, profile, force, spec),
             Tool::CursorAgent => tools::cursor::save(self, profile, force, spec),
-            Tool::CodexCli => bail!(
-                "{} does not support env-based profiles",
-                tool.display_name()
-            ),
+            Tool::CodexCli | Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                bail!(
+                    "{} does not support env-based profiles",
+                    tool.display_name()
+                )
+            }
         }
     }
 
@@ -64,6 +69,9 @@ impl ProfileStore {
 
         match tool {
             Tool::CodexCli => tools::codex::use_profile(self, profile),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
             Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
@@ -73,6 +81,9 @@ impl ProfileStore {
             Tool::CodexCli => tools::codex::list(self),
             Tool::ClaudeCode => tools::claude::list(self),
             Tool::CursorAgent => tools::cursor::list(self),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -87,6 +98,9 @@ impl ProfileStore {
                 tool,
                 state: CurrentState::Unknown,
             }),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -97,6 +111,9 @@ impl ProfileStore {
             Tool::CodexCli => tools::codex::remove(self, profile, force),
             Tool::ClaudeCode => tools::claude::remove(self, profile),
             Tool::CursorAgent => tools::cursor::remove(self, profile),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -105,6 +122,9 @@ impl ProfileStore {
             Tool::CodexCli => tools::codex::backups(self),
             Tool::ClaudeCode => Ok(Vec::new()),
             Tool::CursorAgent => Ok(Vec::new()),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -113,6 +133,9 @@ impl ProfileStore {
 
         match tool {
             Tool::CodexCli => tools::codex::restore(self, backup_id),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
             Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
@@ -133,6 +156,9 @@ impl ProfileStore {
             Tool::CodexCli => tools::codex::exec(self, profile, command),
             Tool::ClaudeCode => tools::claude::exec(self, profile, command),
             Tool::CursorAgent => tools::cursor::exec(self, profile, command),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -143,6 +169,9 @@ impl ProfileStore {
             Tool::CodexCli => tools::codex::shell(self, profile),
             Tool::ClaudeCode => tools::claude::shell(self, profile),
             Tool::CursorAgent => tools::cursor::shell(self, profile),
+            Tool::CodexDesktop | Tool::ClaudeDesktop | Tool::CursorDesktop => {
+                unsupported_profile_switching(tool)
+            }
         }
     }
 
@@ -259,6 +288,13 @@ impl ProfileStore {
 fn unsupported_global_switching<T>(tool: Tool) -> Result<T> {
     bail!(
         "{} global profile switching is not implemented yet",
+        tool.display_name()
+    );
+}
+
+fn unsupported_profile_switching<T>(tool: Tool) -> Result<T> {
+    bail!(
+        "{} profile switching is not implemented; read-only status and doctor are available",
         tool.display_name()
     );
 }

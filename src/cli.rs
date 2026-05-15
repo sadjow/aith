@@ -147,10 +147,16 @@ enum Command {
 enum ToolArg {
     #[value(name = "codex-cli", alias = "codex")]
     CodexCli,
+    #[value(name = "codex-desktop")]
+    CodexDesktop,
     #[value(name = "claude-code", alias = "claude")]
     ClaudeCode,
+    #[value(name = "claude-desktop")]
+    ClaudeDesktop,
     #[value(name = "cursor-agent", alias = "cursor")]
     CursorAgent,
+    #[value(name = "cursor-desktop")]
+    CursorDesktop,
 }
 
 #[derive(Clone, Debug)]
@@ -182,8 +188,11 @@ impl From<ToolArg> for Tool {
     fn from(value: ToolArg) -> Self {
         match value {
             ToolArg::CodexCli => Tool::CodexCli,
+            ToolArg::CodexDesktop => Tool::CodexDesktop,
             ToolArg::ClaudeCode => Tool::ClaudeCode,
+            ToolArg::ClaudeDesktop => Tool::ClaudeDesktop,
             ToolArg::CursorAgent => Tool::CursorAgent,
+            ToolArg::CursorDesktop => Tool::CursorDesktop,
         }
     }
 }
@@ -205,6 +214,11 @@ pub fn run() -> Result<()> {
                 if matches!(tool, Tool::ClaudeCode | Tool::CursorAgent) {
                     bail!(
                         "{} profiles are env-based; pass --from-env TARGET=SOURCE or --set-env NAME=VALUE",
+                        tool.display_name()
+                    );
+                } else if tool.is_desktop() {
+                    bail!(
+                        "{} profile switching is not implemented; read-only status and doctor are available",
                         tool.display_name()
                     );
                 }
@@ -312,7 +326,7 @@ pub fn run() -> Result<()> {
         }
         Command::Tools => {
             for tool in Tool::all() {
-                println!("{:<14} {}", tool.key(), tool.description());
+                println!("{:<15} {}", tool.key(), tool.description());
             }
         }
     }
