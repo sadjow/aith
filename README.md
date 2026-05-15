@@ -15,6 +15,7 @@ Implemented:
 - Tool status checks for Codex, Claude Code, and Cursor.
 - Codex profile save/list/current/use/remove.
 - Codex backup list/restore.
+- Codex one-command temporary profile execution.
 - Automatic backup before replacing active Codex auth.
 - Private Unix permissions for stored profile directories and auth files.
 
@@ -22,7 +23,7 @@ Not implemented yet:
 
 - Claude Code profile switching.
 - Cursor profile switching.
-- One-command or shell-scoped temporary profiles.
+- Shell-scoped temporary profiles.
 
 ## Quick Start
 
@@ -52,6 +53,12 @@ Inspect backups created by profile switches:
 ```sh
 cargo run -- backups codex
 cargo run -- restore codex auth-1778702155-74626.json
+```
+
+Run one command with a saved Codex profile without switching your active login:
+
+```sh
+cargo run -- exec codex personal -- codex
 ```
 
 Remove a saved Codex profile:
@@ -195,6 +202,23 @@ aith restore codex auth-1778702155-74626.json
 For Codex, this copies the selected backup to the active `auth.json`. The
 current active `auth.json` is backed up first, so restore is reversible.
 
+### Exec
+
+Run a command with a temporary profile-scoped auth environment:
+
+```sh
+aith exec codex personal -- codex
+aith exec codex work -- codex exec "review this repo"
+```
+
+For Codex, `exec` creates a temporary `CODEX_HOME`, copies the selected
+profile's `auth.json` into it, copies the current Codex `config.toml` when one
+exists, and runs the command with that temporary `CODEX_HOME`.
+
+The active Codex auth file is not modified, and the temporary directory is
+removed after the command exits. `aith exec` exits with the same status code as
+the child command.
+
 ## Storage
 
 Profiles are stored under `AITH_HOME` when it is set. Otherwise, `aith` uses the
@@ -224,6 +248,8 @@ are written with `0600` permissions.
 - Credential file contents are never printed by status/current/list commands.
 - Profile names are limited to ASCII letters, numbers, `-`, and `_`.
 - `use` and `restore` create a backup before replacing active Codex auth.
+- `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex
+  auth.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
 - `restore` only accepts generated backup IDs in the form
@@ -256,8 +282,8 @@ devenv shell -- ci
 ## Planned Commands
 
 ```sh
-aith exec cursor work -- cursor agent
 aith shell codex client-a
+aith exec cursor work -- cursor agent
 ```
 
 ## Design Direction

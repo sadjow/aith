@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -78,6 +80,20 @@ enum Command {
 
         /// Backup id from `aith backups <tool>`.
         backup_id: String,
+    },
+
+    /// Run a command with a temporary profile-scoped auth environment.
+    Exec {
+        /// Tool whose profile should be used.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Profile name to use for this command.
+        profile: String,
+
+        /// Command to run after `--`.
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<OsString>,
     },
 
     /// Show which saved profile matches the active auth state.
@@ -178,6 +194,15 @@ pub fn run() -> Result<()> {
             let store = ProfileStore::new()?;
             let result = store.restore(tool.into(), &backup_id)?;
             print_restore_result(&result);
+        }
+        Command::Exec {
+            tool,
+            profile,
+            command,
+        } => {
+            let store = ProfileStore::new()?;
+            let result = store.exec_profile(tool.into(), &profile, &command)?;
+            std::process::exit(result.status_code);
         }
         Command::Current { tool } => {
             let store = ProfileStore::new()?;

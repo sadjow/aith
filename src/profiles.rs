@@ -1,5 +1,7 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
@@ -8,6 +10,7 @@ use crate::paths::{aith_data_dir, env_path_or_home};
 use crate::tools::Tool;
 
 const CODEX_AUTH_FILE: &str = "auth.json";
+const CODEX_CONFIG_FILE: &str = "config.toml";
 
 #[derive(Debug)]
 pub struct ProfileStore {
@@ -38,6 +41,11 @@ pub struct RestoreResult {
     pub source: PathBuf,
     pub destination: PathBuf,
     pub backup: Option<PathBuf>,
+}
+
+#[derive(Debug)]
+pub struct ExecResult {
+    pub status_code: i32,
 }
 
 #[derive(Debug)]
@@ -129,6 +137,24 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => self.restore_codex(backup_id),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn exec_profile(
+        &self,
+        tool: Tool,
+        profile: &str,
+        command: &[OsString],
+    ) -> Result<ExecResult> {
+        validate_profile_name(profile)?;
+
+        if command.is_empty() {
+            bail!("command cannot be empty");
+        }
+
+        match tool {
+            Tool::Codex => self.exec_codex(profile, command),
             Tool::Claude | Tool::Cursor => unsupported(tool),
         }
     }
@@ -293,6 +319,33 @@ impl ProfileStore {
         })
     }
 
+    fn exec_codex(&self, profile: &str, command: &[OsString]) -> Result<ExecResult> {
+        let source = self.profile_auth_path(Tool::Codex, profile);
+        ensure_file_exists(&source, "saved Codex auth profile")?;
+
+        let temp_dir = TempDir::create("aith-codex")?;
+        let temp_codex_home = temp_dir.path();
+
+        copy_file_private(&source, &temp_codex_home.join(CODEX_AUTH_FILE))
+            .with_context(|| format!("failed to stage Codex profile '{}'", profile))?;
+
+        let codex_config_path = codex_config_path()?;
+        if codex_config_path.is_file() {
+            copy_file_private(&codex_config_path, &temp_codex_home.join(CODEX_CONFIG_FILE))
+                .context("failed to stage Codex config")?;
+        }
+
+        let status = Command::new(&command[0])
+            .args(&command[1..])
+            .env("CODEX_HOME", temp_codex_home)
+            .status()
+            .with_context(|| format!("failed to run command '{}'", command[0].to_string_lossy()))?;
+
+        Ok(ExecResult {
+            status_code: status_code(status),
+        })
+    }
+
     fn profile_auth_path(&self, tool: Tool, profile: &str) -> PathBuf {
         self.tool_profiles_dir(tool)
             .join(profile)
@@ -376,10 +429,18 @@ impl ProfileStore {
 }
 
 fn codex_auth_path() -> Result<PathBuf> {
+    Ok(codex_config_dir()?.join(CODEX_AUTH_FILE))
+}
+
+fn codex_config_path() -> Result<PathBuf> {
+    Ok(codex_config_dir()?.join(CODEX_CONFIG_FILE))
+}
+
+fn codex_config_dir() -> Result<PathBuf> {
     let config_dir = env_path_or_home("CODEX_HOME", ".codex")
         .context("could not determine Codex config directory")?;
 
-    Ok(config_dir.join(CODEX_AUTH_FILE))
+    Ok(config_dir)
 }
 
 fn validate_profile_name(profile: &str) -> Result<()> {
@@ -504,6 +565,77 @@ fn copy_file_private(source: &Path, destination: &Path) -> Result<()> {
             destination.display()
         )
     })
+}
+
+#[derive(Debug)]
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn create(prefix: &str) -> Result<Self> {
+        let root = std::env::temp_dir();
+
+        for attempt in 0..100 {
+            let path = root.join(format!(
+                "{}-{}-{}-{}",
+                prefix,
+                std::process::id(),
+                unix_timestamp_nanos()?,
+                attempt
+            ));
+
+            match fs::create_dir(&path) {
+                Ok(()) => {
+                    #[cfg(unix)]
+                    secure_dir(&path)?;
+
+                    return Ok(Self { path });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(error)
+                        .with_context(|| format!("failed to create {}", path.display()));
+                }
+            }
+        }
+
+        bail!("failed to create a unique temporary directory");
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn unix_timestamp_nanos() -> Result<u128> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before UNIX epoch")?
+        .as_nanos())
+}
+
+fn status_code(status: std::process::ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+
+    1
 }
 
 fn unsupported<T>(tool: Tool) -> Result<T> {
