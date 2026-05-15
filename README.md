@@ -16,6 +16,7 @@ aith add codex personal
 aith list codex
 aith current codex
 aith use codex work
+aith remove codex old-client
 ```
 
 ## Development

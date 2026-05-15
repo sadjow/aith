@@ -32,6 +32,13 @@ pub struct UseResult {
 }
 
 #[derive(Debug)]
+pub struct RemoveResult {
+    pub tool: Tool,
+    pub profile: String,
+    pub removed: PathBuf,
+}
+
+#[derive(Debug)]
 pub struct CurrentResult {
     pub tool: Tool,
     pub state: CurrentState,
@@ -82,6 +89,15 @@ impl ProfileStore {
     pub fn current(&self, tool: Tool) -> Result<CurrentResult> {
         match tool {
             Tool::Codex => self.current_codex(),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn remove(&self, tool: Tool, profile: &str, force: bool) -> Result<RemoveResult> {
+        validate_profile_name(profile)?;
+
+        match tool {
+            Tool::Codex => self.remove_codex(profile, force),
             Tool::Claude | Tool::Cursor => unsupported(tool),
         }
     }
@@ -197,6 +213,23 @@ impl ProfileStore {
         Ok(CurrentResult {
             tool: Tool::Codex,
             state: current_state(matches),
+        })
+    }
+
+    fn remove_codex(&self, profile: &str, force: bool) -> Result<RemoveResult> {
+        let profile_dir = self.tool_profiles_dir(Tool::Codex).join(profile);
+        let auth_path = profile_dir.join(CODEX_AUTH_FILE);
+        ensure_file_exists(&auth_path, "saved Codex auth profile")?;
+
+        ensure_removable_profile(Tool::Codex, profile, &self.current_codex()?.state, force)?;
+
+        fs::remove_dir_all(&profile_dir)
+            .with_context(|| format!("failed to remove {}", profile_dir.display()))?;
+
+        Ok(RemoveResult {
+            tool: Tool::Codex,
+            profile: profile.to_owned(),
+            removed: profile_dir,
         })
     }
 
@@ -370,9 +403,41 @@ fn current_state(matches: Vec<String>) -> CurrentState {
     }
 }
 
+fn ensure_removable_profile(
+    tool: Tool,
+    profile: &str,
+    current: &CurrentState,
+    force: bool,
+) -> Result<()> {
+    if force {
+        return Ok(());
+    }
+
+    match current {
+        CurrentState::Known(active_profile) if active_profile == profile => {
+            bail!(
+                "profile '{}' is currently active for {}; pass --force to remove it",
+                profile,
+                tool.key()
+            );
+        }
+        CurrentState::Ambiguous(active_profiles)
+            if active_profiles.iter().any(|active| active == profile) =>
+        {
+            bail!(
+                "profile '{}' matches the active {} auth state; pass --force to remove it",
+                profile,
+                tool.key()
+            );
+        }
+        CurrentState::Known(_) | CurrentState::Ambiguous(_) | CurrentState::Unknown => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CurrentState, current_state, validate_profile_name};
+    use super::{CurrentState, current_state, ensure_removable_profile, validate_profile_name};
+    use crate::tools::Tool;
 
     #[test]
     fn accepts_simple_profile_names() {
@@ -401,6 +466,46 @@ mod tests {
         assert_eq!(
             current_state(vec!["personal".to_owned(), "work".to_owned()]),
             CurrentState::Ambiguous(vec!["personal".to_owned(), "work".to_owned()])
+        );
+    }
+
+    #[test]
+    fn blocks_removing_current_profile_without_force() {
+        assert!(
+            ensure_removable_profile(
+                Tool::Codex,
+                "work",
+                &CurrentState::Known("work".to_owned()),
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_removable_profile(
+                Tool::Codex,
+                "work",
+                &CurrentState::Ambiguous(vec!["personal".to_owned(), "work".to_owned()]),
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_removable_profile(
+                Tool::Codex,
+                "work",
+                &CurrentState::Known("work".to_owned()),
+                true
+            )
+            .is_ok()
+        );
+        assert!(
+            ensure_removable_profile(
+                Tool::Codex,
+                "old",
+                &CurrentState::Known("work".to_owned()),
+                false
+            )
+            .is_ok()
         );
     }
 }

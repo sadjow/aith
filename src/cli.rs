@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::profiles::{CurrentResult, CurrentState, ProfileStore, SaveResult, UseResult};
+use crate::profiles::{
+    CurrentResult, CurrentState, ProfileStore, RemoveResult, SaveResult, UseResult,
+};
 use crate::tools::{Tool, ToolStatus};
 
 #[derive(Debug, Parser)]
@@ -44,6 +46,20 @@ enum Command {
         /// Tool whose profiles should be listed.
         #[arg(value_enum)]
         tool: ToolArg,
+    },
+
+    /// Remove a saved profile.
+    Remove {
+        /// Tool whose profile should be removed.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Profile name to remove.
+        profile: String,
+
+        /// Remove the profile even if it matches the active auth state.
+        #[arg(long, short)]
+        force: bool,
     },
 
     /// Show which saved profile matches the active auth state.
@@ -116,6 +132,15 @@ pub fn run() -> Result<()> {
                 }
             }
         }
+        Command::Remove {
+            tool,
+            profile,
+            force,
+        } => {
+            let store = ProfileStore::new()?;
+            let result = store.remove(tool.into(), &profile, force)?;
+            print_remove_result(&result);
+        }
         Command::Current { tool } => {
             let store = ProfileStore::new()?;
             let result = store.current(tool.into())?;
@@ -163,6 +188,11 @@ fn print_use_result(result: &UseResult) {
     if let Some(backup) = &result.backup {
         println!("  backup      {}", backup.display());
     }
+}
+
+fn print_remove_result(result: &RemoveResult) {
+    println!("removed {} profile '{}'", result.tool.key(), result.profile);
+    println!("  removed {}", result.removed.display());
 }
 
 fn print_current_result(result: &CurrentResult) {
