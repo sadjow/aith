@@ -14,6 +14,7 @@ Implemented:
 
 - Tool status checks for Codex, Claude Code, and Cursor.
 - Read-only doctor diagnostics for auth/profile readiness.
+- Claude Code read-only auth/config discovery.
 - Codex profile save/list/current/use/remove.
 - Codex backup list/restore.
 - Codex one-command temporary profile execution.
@@ -283,6 +284,33 @@ backups/codex/auth-<timestamp>-<pid>.json
 On Unix, profile directories are created with `0700` permissions and auth files
 are written with `0600` permissions.
 
+## Claude Code Discovery
+
+`aith status claude` and `aith doctor claude` are read-only. They check known
+Claude Code settings and auth surfaces without reading credential contents.
+
+Claude Code discovery currently checks:
+
+- User config directory: `CLAUDE_CONFIG_DIR` or `~/.claude`
+- User settings: `settings.json`
+- User state: `~/.claude.json`
+- Project settings: `.claude/settings.json` and local `.claude/settings.local.json`
+- Managed settings path for the current platform
+- Terminal auth environment variables such as `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, and cloud-provider mode
+  variables
+
+Credential storage differs by platform. On macOS, Claude Code subscription
+credentials are stored in Keychain and `aith` does not inspect Keychain. On
+Linux and Windows, Claude Code uses `.credentials.json` under the Claude config
+directory, including `CLAUDE_CONFIG_DIR` when set.
+
+References:
+
+- [Claude Code settings](https://code.claude.com/docs/en/settings)
+- [Claude Code authentication](https://code.claude.com/docs/en/team)
+- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
+
 ## Safety Model
 
 - Credential file contents are never printed by status/doctor/current/list
@@ -344,6 +372,7 @@ The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
 - `src/profiles/`: shared profile storage, result types, validation, backups,
   and filesystem safety helpers.
 - `src/tools/`: tool metadata and tool-specific adapters.
+- `src/tools/claude.rs`: Claude Code read-only auth/config discovery.
 - `src/tools/codex.rs`: Codex auth/profile behavior.
 
 ## Planned Commands

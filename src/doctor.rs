@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::profiles::{CurrentState, ProfileStore};
-use crate::tools::{Tool, ToolStatus};
+use crate::tools::{Tool, ToolStatus, claude};
 
 #[derive(Debug)]
 pub struct DoctorReport {
@@ -45,6 +45,7 @@ pub struct DoctorFinding {
 #[derive(Debug)]
 pub enum DoctorSeverity {
     Ok,
+    Info,
     Warning,
 }
 
@@ -64,7 +65,8 @@ pub fn diagnose(store: &ProfileStore, tools: &[Tool]) -> Result<DoctorReport> {
 fn diagnose_tool(store: &ProfileStore, tool: Tool) -> Result<ToolDoctor> {
     match tool {
         Tool::Codex => diagnose_codex(store),
-        Tool::Claude | Tool::Cursor => Ok(diagnose_unsupported(tool)),
+        Tool::Claude => Ok(diagnose_claude()),
+        Tool::Cursor => Ok(diagnose_unsupported(tool)),
     }
 }
 
@@ -120,6 +122,52 @@ fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
     })
 }
 
+fn diagnose_claude() -> ToolDoctor {
+    let tool = Tool::Claude;
+    let status = tool.inspect();
+    let mut findings = Vec::new();
+    let has_terminal_auth_env = claude::has_terminal_auth_env();
+    let has_path_credentials =
+        claude::credentials_are_path_backed() && path_exists(&status, claude::CREDENTIALS_LABEL);
+
+    if has_terminal_auth_env {
+        findings.push(DoctorFinding::info(
+            "Claude terminal auth environment is configured",
+        ));
+    }
+
+    if claude::credentials_are_path_backed() {
+        if has_path_credentials {
+            findings.push(DoctorFinding::info("Claude credentials file was found"));
+        } else if !has_terminal_auth_env {
+            findings.push(DoctorFinding::warning(
+                "no Claude terminal auth env or credentials file found; run `claude` and use `/login`, or set a terminal auth env var",
+            ));
+        }
+    } else {
+        findings.push(DoctorFinding::info(
+            "Claude subscription credentials may exist in macOS Keychain; aith cannot inspect Keychain safely",
+        ));
+    }
+
+    if !path_exists(&status, claude::CONFIG_DIR_LABEL) {
+        findings.push(DoctorFinding::info(
+            "Claude user config directory has not been created yet",
+        ));
+    }
+
+    findings.push(DoctorFinding::warning(
+        "Claude Code profile switching is not implemented yet; discovery only",
+    ));
+
+    ToolDoctor {
+        tool,
+        status,
+        profiles: DoctorProfileSummary::Unsupported,
+        findings,
+    }
+}
+
 fn diagnose_unsupported(tool: Tool) -> ToolDoctor {
     ToolDoctor {
         tool,
@@ -160,6 +208,13 @@ impl DoctorFinding {
     fn warning(message: impl Into<String>) -> Self {
         Self {
             severity: DoctorSeverity::Warning,
+            message: message.into(),
+        }
+    }
+
+    fn info(message: impl Into<String>) -> Self {
+        Self {
+            severity: DoctorSeverity::Info,
             message: message.into(),
         }
     }

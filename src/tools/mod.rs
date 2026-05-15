@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use crate::paths::{cursor_user_dir, env_path_or_home, home_dir};
+use crate::paths::cursor_user_dir;
 
+pub(crate) mod claude;
 pub(crate) mod codex;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,38 +65,9 @@ impl Tool {
     pub fn inspect(self) -> ToolStatus {
         match self {
             Tool::Codex => codex::inspect(),
-            Tool::Claude => inspect_claude(),
+            Tool::Claude => claude::inspect(),
             Tool::Cursor => inspect_cursor(),
         }
-    }
-}
-
-fn inspect_claude() -> ToolStatus {
-    let config_dir = env_path_or_home("CLAUDE_CONFIG_DIR", ".claude");
-    let home = home_dir();
-
-    ToolStatus {
-        tool: Tool::Claude,
-        paths: vec![
-            path_check("config dir", config_dir.clone()),
-            path_check(
-                "settings file",
-                config_dir.as_ref().map(|path| path.join("settings.json")),
-            ),
-            path_check(
-                "user state",
-                home.as_ref().map(|path| path.join(".claude.json")),
-            ),
-        ],
-        env: env_checks(&[
-            "CLAUDE_CONFIG_DIR",
-            "ANTHROPIC_API_KEY",
-            "CLAUDE_CODE_SIMPLE",
-        ]),
-        notes: vec![
-            "OAuth/keychain state is tool-managed and is not inspected",
-            "bare/API-key sessions can avoid persistent OAuth state",
-        ],
     }
 }
 

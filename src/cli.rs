@@ -404,6 +404,7 @@ fn format_doctor_current(current: &DoctorCurrent) -> String {
 fn doctor_severity_label(severity: &DoctorSeverity) -> &'static str {
     match severity {
         DoctorSeverity::Ok => "ok",
+        DoctorSeverity::Info => "info",
         DoctorSeverity::Warning => "warning",
     }
 }

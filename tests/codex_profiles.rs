@@ -9,6 +9,8 @@ struct TestEnv {
     _temp: TempDir,
     aith_home: PathBuf,
     codex_home: PathBuf,
+    claude_config_dir: PathBuf,
+    home: PathBuf,
 }
 
 impl TestEnv {
@@ -17,13 +19,19 @@ impl TestEnv {
         let root = temp.path();
         let aith_home = root.join("aith");
         let codex_home = root.join("codex");
+        let claude_config_dir = root.join("claude");
+        let home = root.join("home");
 
         fs::create_dir_all(&codex_home).expect("create fake codex home");
+        fs::create_dir_all(&claude_config_dir).expect("create fake claude config dir");
+        fs::create_dir_all(&home).expect("create fake home");
 
         Self {
             _temp: temp,
             aith_home,
             codex_home,
+            claude_config_dir,
+            home,
         }
     }
 
@@ -80,6 +88,18 @@ impl TestEnv {
         let mut command = Command::cargo_bin("aith").expect("aith binary");
         command.env("AITH_HOME", &self.aith_home);
         command.env("CODEX_HOME", &self.codex_home);
+        command.env("CLAUDE_CONFIG_DIR", &self.claude_config_dir);
+        command.env("HOME", &self.home);
+        for name in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+        ] {
+            command.env_remove(name);
+        }
         command
     }
 }
@@ -374,12 +394,32 @@ fn doctor_reports_unsupported_tools() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Claude Code (claude)"))
+        .stdout(predicate::str::contains("user config dir"))
+        .stdout(predicate::str::contains("user settings"))
+        .stdout(predicate::str::contains("project settings"))
+        .stdout(predicate::str::contains("env ANTHROPIC_API_KEY unset"))
         .stdout(predicate::str::contains("profiles          unsupported"))
         .stdout(predicate::str::contains("backups           unsupported"))
         .stdout(predicate::str::contains("current           unsupported"))
         .stdout(predicate::str::contains(
-            "warning           Claude Code profile switching is not implemented yet",
+            "warning           Claude Code profile switching is not implemented yet; discovery only",
         ));
+}
+
+#[test]
+fn doctor_reports_claude_terminal_auth_env_without_printing_secret() {
+    let env = TestEnv::new();
+
+    env.command()
+        .env("ANTHROPIC_API_KEY", "test-secret-key")
+        .args(["doctor", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("env ANTHROPIC_API_KEY set"))
+        .stdout(predicate::str::contains(
+            "info              Claude terminal auth environment is configured",
+        ))
+        .stdout(predicate::str::contains("test-secret-key").not());
 }
 
 fn shell_path(path: &Path) -> String {
