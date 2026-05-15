@@ -3,27 +3,43 @@
 `aith` is a native CLI for managing account profiles for AI coding tools.
 
 The goal is to make work, personal, and client identities explicit across tools
-like Claude Code, Codex, and Cursor without repeated logout/login flows.
+like Codex CLI, Claude Code, and Cursor Agent without repeated logout/login
+flows.
+
+## Supported Surfaces
+
+`aith` treats each auth surface separately. A terminal tool and a desktop app can
+be logged into different accounts, so they should not share one profile target.
+
+Current command keys target CLI/agent surfaces:
+
+- `codex`: Codex CLI.
+- `claude`: Claude Code.
+- `cursor`: Cursor Agent or terminal Cursor auth through `CURSOR_API_KEY`.
+
+Desktop apps are not managed yet. Future support should use separate explicit
+targets such as `codex-desktop`, `claude-desktop`, or `cursor-desktop`, starting
+with read-only `status` and `doctor` discovery before any switching behavior.
 
 ## Status
 
-`aith` is early. Codex profile management is implemented first because Codex
-stores its active auth state in a local `auth.json` file.
+`aith` is early. Codex CLI profile management is implemented first because
+Codex CLI stores its active auth state in a local `auth.json` file.
 
 Implemented:
 
-- Tool status checks for Codex, Claude Code, and Cursor.
+- Tool status checks for Codex CLI, Claude Code, and Cursor Agent.
 - Read-only doctor diagnostics for auth/profile readiness.
 - Claude Code auth/config discovery.
 - Claude Code env-profile save/list/remove.
 - Claude Code one-command and shell-scoped env-profile sessions.
 - Cursor env-profile save/list/remove.
 - Cursor one-command and shell-scoped env-profile sessions.
-- Codex profile save/list/current/use/remove.
-- Codex backup list/restore.
-- Codex one-command temporary profile execution.
-- Codex shell-scoped temporary profile sessions.
-- Automatic backup before replacing active Codex auth.
+- Codex CLI profile save/list/current/use/remove.
+- Codex CLI backup list/restore.
+- Codex CLI one-command temporary profile execution.
+- Codex CLI shell-scoped temporary profile sessions.
+- Automatic backup before replacing active Codex CLI auth.
 - Private Unix permissions for stored profile directories, auth files, and env
   profile files.
 
@@ -32,6 +48,7 @@ Not implemented yet:
 - Claude Code global login switching, including subscription/Keychain account
   switching.
 - Cursor global login switching beyond terminal API-key sessions.
+- Desktop app auth discovery or switching for Codex, Claude, or Cursor.
 
 ## Quick Start
 
@@ -42,13 +59,13 @@ devenv shell
 cargo run -- status
 ```
 
-Save the current Codex login as a profile:
+Save the current Codex CLI login as a profile:
 
 ```sh
 cargo run -- save codex personal
 ```
 
-Inspect and switch Codex profiles:
+Inspect and switch Codex CLI profiles:
 
 ```sh
 cargo run -- list codex
@@ -64,13 +81,14 @@ cargo run -- backups codex
 cargo run -- restore codex auth-1778702155-74626.json
 ```
 
-Run one command with a saved Codex profile without switching your active login:
+Run one command with a saved Codex CLI profile without switching your active
+login:
 
 ```sh
 cargo run -- exec codex personal -- codex
 ```
 
-Start a shell with a saved Codex profile without switching your active login:
+Start a shell with a saved Codex CLI profile without switching your active login:
 
 ```sh
 cargo run -- shell codex personal
@@ -92,7 +110,7 @@ cargo run -- save cursor work --from-env CURSOR_API_KEY=CURSOR_API_KEY_WORK
 cargo run -- exec cursor work -- cursor-agent
 ```
 
-Remove a saved Codex profile:
+Remove a saved Codex CLI profile:
 
 ```sh
 cargo run -- remove codex old-client
@@ -219,8 +237,8 @@ Switch a tool to a saved profile:
 aith use codex personal
 ```
 
-For Codex, this replaces the active `auth.json` with the saved profile snapshot.
-The previous active `auth.json` is backed up first.
+For Codex CLI, this replaces the active `auth.json` with the saved profile
+snapshot. The previous active `auth.json` is backed up first.
 
 ### Remove
 
@@ -246,7 +264,7 @@ aith remove codex personal --force
 ```
 
 This removes only the saved profile directory. It does not touch active Codex
-auth and does not delete backups.
+CLI auth and does not delete backups.
 
 ### Backups
 
@@ -281,7 +299,7 @@ Restore a backup into the active auth location:
 aith restore codex auth-1778702155-74626.json
 ```
 
-For Codex, this copies the selected backup to the active `auth.json`. The
+For Codex CLI, this copies the selected backup to the active `auth.json`. The
 current active `auth.json` is backed up first, so restore is reversible.
 
 ### Exec
@@ -295,11 +313,11 @@ aith exec claude work -- claude
 aith exec cursor work -- cursor-agent
 ```
 
-For Codex, `exec` creates a temporary `CODEX_HOME`, copies the selected
-profile's `auth.json` into it, copies the current Codex `config.toml` when one
-exists, and runs the command with that temporary `CODEX_HOME`.
+For Codex CLI, `exec` creates a temporary `CODEX_HOME`, copies the selected
+profile's `auth.json` into it, copies the current Codex CLI `config.toml` when
+one exists, and runs the command with that temporary `CODEX_HOME`.
 
-The active Codex auth file is not modified, and the temporary directory is
+The active Codex CLI auth file is not modified, and the temporary directory is
 removed after the command exits. `aith exec` exits with the same status code as
 the child command.
 
@@ -317,11 +335,12 @@ aith shell claude work
 aith shell cursor work
 ```
 
-For Codex, `shell` stages the selected profile exactly like `exec`, then starts
-your configured shell with `CODEX_HOME` pointing at the temporary profile home.
-This lets separate terminal tabs use different Codex profiles at the same time.
+For Codex CLI, `shell` stages the selected profile exactly like `exec`, then
+starts your configured shell with `CODEX_HOME` pointing at the temporary profile
+home. This lets separate terminal tabs use different Codex CLI profiles at the
+same time.
 
-The active Codex auth file is not modified, and the temporary directory is
+The active Codex CLI auth file is not modified, and the temporary directory is
 removed when the shell exits. `aith shell` exits with the same status code as
 the shell.
 
@@ -339,13 +358,13 @@ platform data directory:
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/aith`
 - Windows: `%LOCALAPPDATA%\aith`
 
-Codex profiles are stored as:
+Codex CLI profiles are stored as:
 
 ```text
 profiles/codex/<profile>/auth.json
 ```
 
-Codex backups are stored as:
+Codex CLI backups are stored as:
 
 ```text
 backups/codex/auth-<timestamp>-<pid>.json
@@ -396,9 +415,9 @@ credentials are stored in Keychain and `aith` does not inspect Keychain. On
 Linux and Windows, Claude Code uses `.credentials.json` under the Claude config
 directory, including `CLAUDE_CONFIG_DIR` when set.
 
-Claude env profiles are intentionally narrower than Codex file-backed profiles.
-They do not switch the logged-in Claude Code subscription account. They only set
-terminal auth environment variables for `aith exec claude ...` and
+Claude env profiles are intentionally narrower than Codex CLI file-backed
+profiles. They do not switch the logged-in Claude Code subscription account.
+They only set terminal auth environment variables for `aith exec claude ...` and
 `aith shell claude ...` sessions.
 
 References:
@@ -421,21 +440,23 @@ Cursor user data or any global login state.
 - Credential file contents are never printed by status/doctor/current/list
   commands.
 - Profile names are limited to ASCII letters, numbers, `-`, and `_`.
-- `use` and `restore` create a backup before replacing active Codex auth.
-- `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex
+- `use` and `restore` create a backup before replacing active Codex CLI auth.
+- `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex CLI
   auth.
 - `shell` starts a temporary `CODEX_HOME` session and does not modify active
-  Codex auth.
+  Codex CLI auth.
 - Env profiles store source env variable names for secrets, not secret values.
   Secret values are resolved only when `exec` or `shell` starts.
 - Claude and Cursor env sessions do not modify config files, credential files,
   user data, or macOS Keychain entries.
+- Desktop app auth stores are intentionally out of scope for current profile
+  operations.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
 - `restore` only accepts generated backup IDs in the form
   `auth-<timestamp>-<pid>.json`.
-- Claude Code and Cursor global login switching intentionally return “not
-  implemented yet” until their auth models are handled explicitly.
+- Claude Code, Cursor, and desktop global login switching intentionally return
+  “not implemented yet” until their auth models are handled explicitly.
 
 ## Development
 
@@ -484,7 +505,7 @@ The workflow installs Nix and `devenv`, then runs the pinned Rust toolchain from
 - `src/tools/`: tool metadata and tool-specific adapters.
 - `src/tools/claude.rs`: Claude Code auth/config discovery and env-profile
   sessions.
-- `src/tools/codex.rs`: Codex auth/profile behavior.
+- `src/tools/codex.rs`: Codex CLI auth/profile behavior.
 - `src/tools/cursor.rs`: Cursor auth discovery and env-profile sessions.
 - `src/tools/env_session.rs`: shared env-profile session behavior.
 
