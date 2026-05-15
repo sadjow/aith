@@ -272,15 +272,23 @@ cargo run -- status
 Common one-off checks can run without entering an interactive shell:
 
 ```sh
-devenv shell -- check
-devenv shell -- fmt
-devenv shell -- clippy
-devenv shell -- tests
-devenv shell -- ci
+devenv shell cargo check
+devenv shell cargo fmt -- --check
+devenv shell cargo clippy --all-targets -- -D warnings
+devenv shell cargo test
+devenv shell ci
 ```
 
 Integration tests run the real `aith` binary against temporary fake `AITH_HOME`
 and `CODEX_HOME` directories. They do not read or modify real Codex credentials.
+
+## Project Structure
+
+- `src/cli.rs`: command parsing and user-facing output.
+- `src/profiles/`: shared profile storage, result types, validation, backups,
+  and filesystem safety helpers.
+- `src/tools/`: tool metadata and tool-specific adapters.
+- `src/tools/codex.rs`: Codex auth/profile behavior.
 
 ## Planned Commands
 

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use crate::paths::{cursor_user_dir, env_path_or_home, home_dir};
 
+pub(crate) mod codex;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tool {
     Codex,
@@ -61,31 +63,10 @@ impl Tool {
 
     pub fn inspect(self) -> ToolStatus {
         match self {
-            Tool::Codex => inspect_codex(),
+            Tool::Codex => codex::inspect(),
             Tool::Claude => inspect_claude(),
             Tool::Cursor => inspect_cursor(),
         }
-    }
-}
-
-fn inspect_codex() -> ToolStatus {
-    let config_dir = env_path_or_home("CODEX_HOME", ".codex");
-
-    ToolStatus {
-        tool: Tool::Codex,
-        paths: vec![
-            path_check("config dir", config_dir.clone()),
-            path_check(
-                "auth file",
-                config_dir.as_ref().map(|path| path.join("auth.json")),
-            ),
-            path_check(
-                "config file",
-                config_dir.as_ref().map(|path| path.join("config.toml")),
-            ),
-        ],
-        env: env_checks(&["CODEX_HOME", "OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"]),
-        notes: vec!["checks file presence only; credential contents are never read"],
     }
 }
 
