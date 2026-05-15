@@ -29,15 +29,15 @@ pub(crate) fn save(
     force: bool,
     spec: EnvProfileSpec,
 ) -> Result<SaveResult> {
-    env_session::save(store, Tool::Claude, profile, force, spec, PROFILE_LABEL)
+    env_session::save(store, Tool::ClaudeCode, profile, force, spec, PROFILE_LABEL)
 }
 
 pub(crate) fn list(store: &ProfileStore) -> Result<Vec<String>> {
-    env_session::list(store, Tool::Claude)
+    env_session::list(store, Tool::ClaudeCode)
 }
 
 pub(crate) fn remove(store: &ProfileStore, profile: &str) -> Result<RemoveResult> {
-    env_session::remove(store, Tool::Claude, profile, PROFILE_LABEL)
+    env_session::remove(store, Tool::ClaudeCode, profile, PROFILE_LABEL)
 }
 
 pub(crate) fn exec(
@@ -45,18 +45,18 @@ pub(crate) fn exec(
     profile: &str,
     command: &[OsString],
 ) -> Result<ExecResult> {
-    env_session::exec(store, Tool::Claude, profile, command, PROFILE_LABEL)
+    env_session::exec(store, Tool::ClaudeCode, profile, command, PROFILE_LABEL)
 }
 
 pub(crate) fn shell(store: &ProfileStore, profile: &str) -> Result<ShellResult> {
-    env_session::shell(store, Tool::Claude, profile, PROFILE_LABEL)
+    env_session::shell(store, Tool::ClaudeCode, profile, PROFILE_LABEL)
 }
 
 pub(crate) fn inspect() -> ToolStatus {
     let config_dir = config_dir();
 
     ToolStatus {
-        tool: Tool::Claude,
+        tool: Tool::ClaudeCode,
         paths: vec![
             super::path_check(CONFIG_DIR_LABEL, config_dir.clone()),
             super::path_check(

@@ -35,8 +35,8 @@ impl ProfileStore {
         validate_profile_name(profile)?;
 
         match tool {
-            Tool::Codex => tools::codex::save(self, profile, force),
-            Tool::Claude | Tool::Cursor => unsupported_global_switching(tool),
+            Tool::CodexCli => tools::codex::save(self, profile, force),
+            Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
 
@@ -50,9 +50,9 @@ impl ProfileStore {
         validate_profile_name(profile)?;
 
         match tool {
-            Tool::Claude => tools::claude::save(self, profile, force, spec),
-            Tool::Cursor => tools::cursor::save(self, profile, force, spec),
-            Tool::Codex => bail!(
+            Tool::ClaudeCode => tools::claude::save(self, profile, force, spec),
+            Tool::CursorAgent => tools::cursor::save(self, profile, force, spec),
+            Tool::CodexCli => bail!(
                 "{} does not support env-based profiles",
                 tool.display_name()
             ),
@@ -63,27 +63,27 @@ impl ProfileStore {
         validate_profile_name(profile)?;
 
         match tool {
-            Tool::Codex => tools::codex::use_profile(self, profile),
-            Tool::Claude | Tool::Cursor => unsupported_global_switching(tool),
+            Tool::CodexCli => tools::codex::use_profile(self, profile),
+            Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
 
     pub fn list(&self, tool: Tool) -> Result<Vec<String>> {
         match tool {
-            Tool::Codex => tools::codex::list(self),
-            Tool::Claude => tools::claude::list(self),
-            Tool::Cursor => tools::cursor::list(self),
+            Tool::CodexCli => tools::codex::list(self),
+            Tool::ClaudeCode => tools::claude::list(self),
+            Tool::CursorAgent => tools::cursor::list(self),
         }
     }
 
     pub fn current(&self, tool: Tool) -> Result<CurrentResult> {
         match tool {
-            Tool::Codex => tools::codex::current(self),
-            Tool::Claude => Ok(CurrentResult {
+            Tool::CodexCli => tools::codex::current(self),
+            Tool::ClaudeCode => Ok(CurrentResult {
                 tool,
                 state: CurrentState::Unknown,
             }),
-            Tool::Cursor => Ok(CurrentResult {
+            Tool::CursorAgent => Ok(CurrentResult {
                 tool,
                 state: CurrentState::Unknown,
             }),
@@ -94,17 +94,17 @@ impl ProfileStore {
         validate_profile_name(profile)?;
 
         match tool {
-            Tool::Codex => tools::codex::remove(self, profile, force),
-            Tool::Claude => tools::claude::remove(self, profile),
-            Tool::Cursor => tools::cursor::remove(self, profile),
+            Tool::CodexCli => tools::codex::remove(self, profile, force),
+            Tool::ClaudeCode => tools::claude::remove(self, profile),
+            Tool::CursorAgent => tools::cursor::remove(self, profile),
         }
     }
 
     pub fn backups(&self, tool: Tool) -> Result<Vec<BackupEntry>> {
         match tool {
-            Tool::Codex => tools::codex::backups(self),
-            Tool::Claude => Ok(Vec::new()),
-            Tool::Cursor => Ok(Vec::new()),
+            Tool::CodexCli => tools::codex::backups(self),
+            Tool::ClaudeCode => Ok(Vec::new()),
+            Tool::CursorAgent => Ok(Vec::new()),
         }
     }
 
@@ -112,8 +112,8 @@ impl ProfileStore {
         validate_backup_id(backup_id)?;
 
         match tool {
-            Tool::Codex => tools::codex::restore(self, backup_id),
-            Tool::Claude | Tool::Cursor => unsupported_global_switching(tool),
+            Tool::CodexCli => tools::codex::restore(self, backup_id),
+            Tool::ClaudeCode | Tool::CursorAgent => unsupported_global_switching(tool),
         }
     }
 
@@ -130,9 +130,9 @@ impl ProfileStore {
         }
 
         match tool {
-            Tool::Codex => tools::codex::exec(self, profile, command),
-            Tool::Claude => tools::claude::exec(self, profile, command),
-            Tool::Cursor => tools::cursor::exec(self, profile, command),
+            Tool::CodexCli => tools::codex::exec(self, profile, command),
+            Tool::ClaudeCode => tools::claude::exec(self, profile, command),
+            Tool::CursorAgent => tools::cursor::exec(self, profile, command),
         }
     }
 
@@ -140,9 +140,9 @@ impl ProfileStore {
         validate_profile_name(profile)?;
 
         match tool {
-            Tool::Codex => tools::codex::shell(self, profile),
-            Tool::Claude => tools::claude::shell(self, profile),
-            Tool::Cursor => tools::cursor::shell(self, profile),
+            Tool::CodexCli => tools::codex::shell(self, profile),
+            Tool::ClaudeCode => tools::claude::shell(self, profile),
+            Tool::CursorAgent => tools::cursor::shell(self, profile),
         }
     }
 
@@ -151,7 +151,7 @@ impl ProfileStore {
     }
 
     pub(crate) fn tool_profiles_dir(&self, tool: Tool) -> PathBuf {
-        self.root.join("profiles").join(tool.key())
+        self.root.join("profiles").join(tool.storage_key())
     }
 
     pub(crate) fn list_tool_profiles(
@@ -184,7 +184,7 @@ impl ProfileStore {
     }
 
     pub(crate) fn tool_backups_dir(&self, tool: Tool) -> PathBuf {
-        self.root.join("backups").join(tool.key())
+        self.root.join("backups").join(tool.storage_key())
     }
 
     pub(crate) fn list_tool_backups(&self, tool: Tool) -> Result<Vec<BackupEntry>> {

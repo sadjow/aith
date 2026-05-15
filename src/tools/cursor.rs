@@ -17,15 +17,22 @@ pub(crate) fn save(
     force: bool,
     spec: EnvProfileSpec,
 ) -> Result<SaveResult> {
-    env_session::save(store, Tool::Cursor, profile, force, spec, PROFILE_LABEL)
+    env_session::save(
+        store,
+        Tool::CursorAgent,
+        profile,
+        force,
+        spec,
+        PROFILE_LABEL,
+    )
 }
 
 pub(crate) fn list(store: &ProfileStore) -> Result<Vec<String>> {
-    env_session::list(store, Tool::Cursor)
+    env_session::list(store, Tool::CursorAgent)
 }
 
 pub(crate) fn remove(store: &ProfileStore, profile: &str) -> Result<RemoveResult> {
-    env_session::remove(store, Tool::Cursor, profile, PROFILE_LABEL)
+    env_session::remove(store, Tool::CursorAgent, profile, PROFILE_LABEL)
 }
 
 pub(crate) fn exec(
@@ -33,16 +40,16 @@ pub(crate) fn exec(
     profile: &str,
     command: &[OsString],
 ) -> Result<ExecResult> {
-    env_session::exec(store, Tool::Cursor, profile, command, PROFILE_LABEL)
+    env_session::exec(store, Tool::CursorAgent, profile, command, PROFILE_LABEL)
 }
 
 pub(crate) fn shell(store: &ProfileStore, profile: &str) -> Result<ShellResult> {
-    env_session::shell(store, Tool::Cursor, profile, PROFILE_LABEL)
+    env_session::shell(store, Tool::CursorAgent, profile, PROFILE_LABEL)
 }
 
 pub(crate) fn inspect() -> ToolStatus {
     ToolStatus {
-        tool: Tool::Cursor,
+        tool: Tool::CursorAgent,
         paths: vec![super::path_check("user data", cursor_user_dir())],
         env: super::env_checks(&["CURSOR_API_KEY"]),
         notes: vec!["Cursor Agent supports session auth through CURSOR_API_KEY or --api-key"],

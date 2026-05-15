@@ -7,9 +7,9 @@ pub(crate) mod env_session;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tool {
-    Codex,
-    Claude,
-    Cursor,
+    CodexCli,
+    ClaudeCode,
+    CursorAgent,
 }
 
 #[derive(Debug)]
@@ -35,38 +35,46 @@ pub struct EnvCheck {
 
 impl Tool {
     pub fn all() -> &'static [Tool] {
-        &[Tool::Codex, Tool::Claude, Tool::Cursor]
+        &[Tool::CodexCli, Tool::ClaudeCode, Tool::CursorAgent]
     }
 
     pub fn key(self) -> &'static str {
         match self {
-            Tool::Codex => "codex",
-            Tool::Claude => "claude",
-            Tool::Cursor => "cursor",
+            Tool::CodexCli => "codex-cli",
+            Tool::ClaudeCode => "claude-code",
+            Tool::CursorAgent => "cursor-agent",
+        }
+    }
+
+    pub fn storage_key(self) -> &'static str {
+        match self {
+            Tool::CodexCli => "codex",
+            Tool::ClaudeCode => "claude",
+            Tool::CursorAgent => "cursor",
         }
     }
 
     pub fn display_name(self) -> &'static str {
         match self {
-            Tool::Codex => "Codex",
-            Tool::Claude => "Claude Code",
-            Tool::Cursor => "Cursor",
+            Tool::CodexCli => "Codex CLI",
+            Tool::ClaudeCode => "Claude Code",
+            Tool::CursorAgent => "Cursor Agent",
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
-            Tool::Codex => "OpenAI Codex CLI auth and config",
-            Tool::Claude => "Claude Code config, keychain, and API-key auth",
-            Tool::Cursor => "Cursor Agent API-key auth and Cursor user data",
+            Tool::CodexCli => "OpenAI Codex CLI auth and config",
+            Tool::ClaudeCode => "Claude Code config, keychain, and API-key auth",
+            Tool::CursorAgent => "Cursor Agent API-key auth and Cursor user data",
         }
     }
 
     pub fn inspect(self) -> ToolStatus {
         match self {
-            Tool::Codex => codex::inspect(),
-            Tool::Claude => claude::inspect(),
-            Tool::Cursor => cursor::inspect(),
+            Tool::CodexCli => codex::inspect(),
+            Tool::ClaudeCode => claude::inspect(),
+            Tool::CursorAgent => cursor::inspect(),
         }
     }
 }

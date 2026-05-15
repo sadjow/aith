@@ -145,9 +145,12 @@ enum Command {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum ToolArg {
-    Codex,
-    Claude,
-    Cursor,
+    #[value(name = "codex-cli", alias = "codex")]
+    CodexCli,
+    #[value(name = "claude-code", alias = "claude")]
+    ClaudeCode,
+    #[value(name = "cursor-agent", alias = "cursor")]
+    CursorAgent,
 }
 
 #[derive(Clone, Debug)]
@@ -178,9 +181,9 @@ impl FromStr for EnvMappingArg {
 impl From<ToolArg> for Tool {
     fn from(value: ToolArg) -> Self {
         match value {
-            ToolArg::Codex => Tool::Codex,
-            ToolArg::Claude => Tool::Claude,
-            ToolArg::Cursor => Tool::Cursor,
+            ToolArg::CodexCli => Tool::CodexCli,
+            ToolArg::ClaudeCode => Tool::ClaudeCode,
+            ToolArg::CursorAgent => Tool::CursorAgent,
         }
     }
 }
@@ -199,7 +202,7 @@ pub fn run() -> Result<()> {
             let tool = Tool::from(tool);
             let store = ProfileStore::new()?;
             let result = if from_env.is_empty() && set_env.is_empty() {
-                if matches!(tool, Tool::Claude | Tool::Cursor) {
+                if matches!(tool, Tool::ClaudeCode | Tool::CursorAgent) {
                     bail!(
                         "{} profiles are env-based; pass --from-env TARGET=SOURCE or --set-env NAME=VALUE",
                         tool.display_name()
@@ -309,7 +312,7 @@ pub fn run() -> Result<()> {
         }
         Command::Tools => {
             for tool in Tool::all() {
-                println!("{:<8} {}", tool.key(), tool.description());
+                println!("{:<14} {}", tool.key(), tool.description());
             }
         }
     }

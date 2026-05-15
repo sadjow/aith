@@ -64,14 +64,14 @@ pub fn diagnose(store: &ProfileStore, tools: &[Tool]) -> Result<DoctorReport> {
 
 fn diagnose_tool(store: &ProfileStore, tool: Tool) -> Result<ToolDoctor> {
     match tool {
-        Tool::Codex => diagnose_codex(store),
-        Tool::Claude => diagnose_claude(store),
-        Tool::Cursor => diagnose_cursor(store),
+        Tool::CodexCli => diagnose_codex(store),
+        Tool::ClaudeCode => diagnose_claude(store),
+        Tool::CursorAgent => diagnose_cursor(store),
     }
 }
 
 fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
-    let tool = Tool::Codex;
+    let tool = Tool::CodexCli;
     let status = tool.inspect();
     let profiles = store.list(tool)?;
     let backups = store.backups(tool)?;
@@ -81,13 +81,13 @@ fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
 
     if !path_exists(&status, "auth file") {
         findings.push(DoctorFinding::warning(
-            "active Codex auth file is missing; run `codex` login before saving a profile",
+            "active Codex CLI auth file is missing; run `codex` login before saving a profile",
         ));
     }
 
     if profiles.is_empty() {
         findings.push(DoctorFinding::warning(
-            "no Codex profiles are saved; run `aith save codex <profile>` to create one",
+            "no Codex CLI profiles are saved; run `aith save codex-cli <profile>` to create one",
         ));
     }
 
@@ -95,19 +95,19 @@ fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
         DoctorCurrent::Known(_) => {}
         DoctorCurrent::Unknown if !profiles.is_empty() && path_exists(&status, "auth file") => {
             findings.push(DoctorFinding::warning(
-                "active Codex auth does not match a saved profile",
+                "active Codex CLI auth does not match a saved profile",
             ));
         }
         DoctorCurrent::Ambiguous(_) => {
             findings.push(DoctorFinding::warning(
-                "active Codex auth matches multiple saved profiles",
+                "active Codex CLI auth matches multiple saved profiles",
             ));
         }
         DoctorCurrent::Unknown => {}
     }
 
     if findings.is_empty() {
-        findings.push(DoctorFinding::ok("Codex profile switching is ready"));
+        findings.push(DoctorFinding::ok("Codex CLI profile switching is ready"));
     }
 
     Ok(ToolDoctor {
@@ -123,7 +123,7 @@ fn diagnose_codex(store: &ProfileStore) -> Result<ToolDoctor> {
 }
 
 fn diagnose_claude(store: &ProfileStore) -> Result<ToolDoctor> {
-    let tool = Tool::Claude;
+    let tool = Tool::ClaudeCode;
     let status = tool.inspect();
     let profiles = store.list(tool)?;
     let backups = store.backups(tool)?;
@@ -161,11 +161,11 @@ fn diagnose_claude(store: &ProfileStore) -> Result<ToolDoctor> {
 
     if profiles.is_empty() {
         findings.push(DoctorFinding::info(
-            "no Claude env profiles are saved; run `aith save claude <profile> --from-env ANTHROPIC_API_KEY=SOURCE_ENV` to create one",
+            "no Claude Code env profiles are saved; run `aith save claude-code <profile> --from-env ANTHROPIC_API_KEY=SOURCE_ENV` to create one",
         ));
     } else {
         findings.push(DoctorFinding::info(
-            "Claude env session profiles are available for exec and shell",
+            "Claude Code env session profiles are available for exec and shell",
         ));
     }
 
@@ -186,7 +186,7 @@ fn diagnose_claude(store: &ProfileStore) -> Result<ToolDoctor> {
 }
 
 fn diagnose_cursor(store: &ProfileStore) -> Result<ToolDoctor> {
-    let tool = Tool::Cursor;
+    let tool = Tool::CursorAgent;
     let status = tool.inspect();
     let profiles = store.list(tool)?;
     let backups = store.backups(tool)?;
@@ -201,16 +201,16 @@ fn diagnose_cursor(store: &ProfileStore) -> Result<ToolDoctor> {
 
     if profiles.is_empty() {
         findings.push(DoctorFinding::info(
-            "no Cursor env profiles are saved; run `aith save cursor <profile> --from-env CURSOR_API_KEY=SOURCE_ENV` to create one",
+            "no Cursor Agent env profiles are saved; run `aith save cursor-agent <profile> --from-env CURSOR_API_KEY=SOURCE_ENV` to create one",
         ));
     } else {
         findings.push(DoctorFinding::info(
-            "Cursor env session profiles are available for exec and shell",
+            "Cursor Agent env session profiles are available for exec and shell",
         ));
     }
 
     findings.push(DoctorFinding::warning(
-        "Cursor global login switching is not implemented; env profiles support exec and shell only",
+        "Cursor Agent global login switching is not implemented; env profiles support exec and shell only",
     ));
 
     Ok(ToolDoctor {

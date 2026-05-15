@@ -133,7 +133,7 @@ fn save_list_and_current_detect_saved_codex_profiles() {
         .args(["save", "codex", "work"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("saved codex profile 'work'"));
+        .stdout(predicate::str::contains("saved codex-cli profile 'work'"));
 
     assert_eq!(
         fs::read_to_string(env.profile_auth("work")).expect("read saved profile"),
@@ -150,7 +150,7 @@ fn save_list_and_current_detect_saved_codex_profiles() {
         .args(["current", "codex"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("codex: work"));
+        .stdout(predicate::str::contains("codex-cli: work"));
 
     env.write_auth("personal");
 
@@ -158,7 +158,7 @@ fn save_list_and_current_detect_saved_codex_profiles() {
         .args(["current", "codex"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("codex: unknown"));
+        .stdout(predicate::str::contains("codex-cli: unknown"));
 
     env.command()
         .args(["save", "codex", "personal"])
@@ -174,8 +174,72 @@ fn save_list_and_current_detect_saved_codex_profiles() {
         .args(["current", "codex"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("codex: ambiguous"))
+        .stdout(predicate::str::contains("codex-cli: ambiguous"))
         .stdout(predicate::str::contains("duplicate, personal"));
+}
+
+#[test]
+fn canonical_tool_names_and_legacy_aliases_share_profiles() {
+    let env = TestEnv::new();
+    env.write_auth("work");
+
+    env.command()
+        .args(["save", "codex-cli", "work"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved codex-cli profile 'work'"));
+
+    env.command()
+        .args(["list", "codex"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+
+    env.command()
+        .args(["current", "codex-cli"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("codex-cli: work"));
+
+    env.command()
+        .env("ANTHROPIC_API_KEY_WORK", "test-secret-key")
+        .args([
+            "save",
+            "claude-code",
+            "work",
+            "--from-env",
+            "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY_WORK",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved claude-code profile 'work'"));
+
+    env.command()
+        .args(["list", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
+
+    env.command()
+        .env("CURSOR_API_KEY_WORK", "cursor-secret-key")
+        .args([
+            "save",
+            "cursor-agent",
+            "work",
+            "--from-env",
+            "CURSOR_API_KEY=CURSOR_API_KEY_WORK",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "saved cursor-agent profile 'work'",
+        ));
+
+    env.command()
+        .args(["list", "cursor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work"));
 }
 
 #[test]
@@ -211,7 +275,7 @@ fn use_creates_backup_and_restore_is_reversible() {
         .args(["restore", "codex", &backups[0]])
         .assert()
         .success()
-        .stdout(predicate::str::contains("restored codex backup"));
+        .stdout(predicate::str::contains("restored codex-cli backup"));
 
     assert_eq!(env.read_auth(), "{\"account\":\"personal\"}\n");
     assert_eq!(env.backup_ids().len(), 2);
@@ -232,7 +296,7 @@ fn remove_refuses_current_profile_unless_forced() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "profile 'work' is currently active for codex",
+            "profile 'work' is currently active for codex-cli",
         ));
 
     assert!(env.profile_auth("work").exists());
@@ -241,7 +305,7 @@ fn remove_refuses_current_profile_unless_forced() {
         .args(["remove", "codex", "work", "--force"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed codex profile 'work'"));
+        .stdout(predicate::str::contains("removed codex-cli profile 'work'"));
 
     assert!(!env.profile_auth("work").exists());
 }
@@ -331,7 +395,7 @@ fn shell_uses_temporary_codex_home_and_preserves_active_auth() {
     let session = fs::read_to_string(session_record).expect("read shell session record");
     let mut lines = session.lines();
     let temp_home = lines.next().expect("temp home line");
-    assert_eq!(lines.next(), Some("codex"));
+    assert_eq!(lines.next(), Some("codex-cli"));
     assert_eq!(lines.next(), Some("work"));
     assert_ne!(Path::new(temp_home), env.codex_home.as_path());
     assert!(!Path::new(temp_home).exists());
@@ -374,7 +438,7 @@ fn save_list_and_remove_claude_env_profiles_without_storing_secret() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("saved claude profile 'work'"))
+        .stdout(predicate::str::contains("saved claude-code profile 'work'"))
         .stdout(predicate::str::contains("source      environment"));
 
     let profile = fs::read_to_string(env.claude_profile("work")).expect("read claude profile");
@@ -392,19 +456,21 @@ fn save_list_and_remove_claude_env_profiles_without_storing_secret() {
         .args(["current", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("claude: unknown"));
+        .stdout(predicate::str::contains("claude-code: unknown"));
 
     env.command()
         .args(["backups", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("no claude backups saved"));
+        .stdout(predicate::str::contains("no claude-code backups saved"));
 
     env.command()
         .args(["remove", "claude", "work"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed claude profile 'work'"));
+        .stdout(predicate::str::contains(
+            "removed claude-code profile 'work'",
+        ));
 
     assert!(!env.claude_profile("work").exists());
 }
@@ -461,7 +527,7 @@ fn exec_uses_claude_env_profile() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "test-secret-key|https://api.example.test|claude|work",
+            "test-secret-key|https://api.example.test|claude-code|work",
         ));
 }
 
@@ -516,7 +582,7 @@ fn shell_uses_claude_env_profile() {
         .args(["shell", "claude", "work"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("test-secret-key|claude|work"));
+        .stdout(predicate::str::contains("test-secret-key|claude-code|work"));
 }
 
 #[test]
@@ -534,7 +600,9 @@ fn save_list_and_remove_cursor_env_profiles_without_storing_secret() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("saved cursor profile 'work'"))
+        .stdout(predicate::str::contains(
+            "saved cursor-agent profile 'work'",
+        ))
         .stdout(predicate::str::contains("source      environment"));
 
     let profile = fs::read_to_string(env.cursor_profile("work")).expect("read cursor profile");
@@ -551,19 +619,21 @@ fn save_list_and_remove_cursor_env_profiles_without_storing_secret() {
         .args(["current", "cursor"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("cursor: unknown"));
+        .stdout(predicate::str::contains("cursor-agent: unknown"));
 
     env.command()
         .args(["backups", "cursor"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("no cursor backups saved"));
+        .stdout(predicate::str::contains("no cursor-agent backups saved"));
 
     env.command()
         .args(["remove", "cursor", "work"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed cursor profile 'work'"));
+        .stdout(predicate::str::contains(
+            "removed cursor-agent profile 'work'",
+        ));
 
     assert!(!env.cursor_profile("work").exists());
 }
@@ -596,7 +666,9 @@ fn exec_uses_cursor_env_profile() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("cursor-secret-key|cursor|work"));
+        .stdout(predicate::str::contains(
+            "cursor-secret-key|cursor-agent|work",
+        ));
 }
 
 #[test]
@@ -626,7 +698,9 @@ fn shell_uses_cursor_env_profile() {
         .args(["shell", "cursor", "work"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("cursor-secret-key|cursor|work"));
+        .stdout(predicate::str::contains(
+            "cursor-secret-key|cursor-agent|work",
+        ));
 }
 
 #[test]
@@ -647,13 +721,13 @@ fn doctor_reports_ready_codex_profile_state() {
             "aith store {}",
             env.aith_home.display()
         )))
-        .stdout(predicate::str::contains("Codex (codex)"))
+        .stdout(predicate::str::contains("Codex CLI (codex-cli)"))
         .stdout(predicate::str::contains("auth file"))
         .stdout(predicate::str::contains("profiles          1"))
         .stdout(predicate::str::contains("backups           0"))
         .stdout(predicate::str::contains("current           work"))
         .stdout(predicate::str::contains(
-            "ok                Codex profile switching is ready",
+            "ok                Codex CLI profile switching is ready",
         ));
 }
 
@@ -670,10 +744,10 @@ fn doctor_warns_when_codex_auth_and_profiles_are_missing() {
         .stdout(predicate::str::contains("profiles          0"))
         .stdout(predicate::str::contains("current           unknown"))
         .stdout(predicate::str::contains(
-            "warning           active Codex auth file is missing",
+            "warning           active Codex CLI auth file is missing",
         ))
         .stdout(predicate::str::contains(
-            "warning           no Codex profiles are saved",
+            "warning           no Codex CLI profiles are saved",
         ));
 }
 
@@ -685,7 +759,7 @@ fn doctor_reports_claude_env_profile_state() {
         .args(["doctor", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Claude Code (claude)"))
+        .stdout(predicate::str::contains("Claude Code (claude-code)"))
         .stdout(predicate::str::contains("user config dir"))
         .stdout(predicate::str::contains("user settings"))
         .stdout(predicate::str::contains("project settings"))
@@ -694,7 +768,7 @@ fn doctor_reports_claude_env_profile_state() {
         .stdout(predicate::str::contains("backups           0"))
         .stdout(predicate::str::contains("current           unknown"))
         .stdout(predicate::str::contains(
-            "info              no Claude env profiles are saved",
+            "info              no Claude Code env profiles are saved",
         ))
         .stdout(predicate::str::contains(
             "warning           Claude global login switching is not implemented; env profiles support exec and shell only",
@@ -725,17 +799,17 @@ fn doctor_reports_cursor_env_profile_state() {
         .args(["doctor", "cursor"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Cursor (cursor)"))
+        .stdout(predicate::str::contains("Cursor Agent (cursor-agent)"))
         .stdout(predicate::str::contains("user data"))
         .stdout(predicate::str::contains("env CURSOR_API_KEY unset"))
         .stdout(predicate::str::contains("profiles          0"))
         .stdout(predicate::str::contains("backups           0"))
         .stdout(predicate::str::contains("current           unknown"))
         .stdout(predicate::str::contains(
-            "info              no Cursor env profiles are saved",
+            "info              no Cursor Agent env profiles are saved",
         ))
         .stdout(predicate::str::contains(
-            "warning           Cursor global login switching is not implemented; env profiles support exec and shell only",
+            "warning           Cursor Agent global login switching is not implemented; env profiles support exec and shell only",
         ));
 }
 

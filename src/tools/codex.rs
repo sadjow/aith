@@ -20,23 +20,23 @@ const BACKUP_EXTENSION: &str = ".json";
 
 pub(crate) fn save(store: &ProfileStore, profile: &str, force: bool) -> Result<SaveResult> {
     let source = auth_path()?;
-    ensure_file_exists(&source, "Codex auth file")?;
+    ensure_file_exists(&source, "Codex CLI auth file")?;
 
-    let destination = store.profile_file_path(Tool::Codex, profile, AUTH_FILE);
+    let destination = store.profile_file_path(Tool::CodexCli, profile, AUTH_FILE);
     if destination.exists() && !force {
         bail!(
             "profile '{}' already exists for {}; pass --force to overwrite it",
             profile,
-            Tool::Codex.key()
+            Tool::CodexCli.key()
         );
     }
 
     store.create_private_store_dir_all(parent_dir(&destination)?)?;
     copy_file_private(&source, &destination)
-        .with_context(|| format!("failed to save Codex auth profile '{}'", profile))?;
+        .with_context(|| format!("failed to save Codex CLI auth profile '{}'", profile))?;
 
     Ok(SaveResult {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         profile: profile.to_owned(),
         source: Some(source),
         destination,
@@ -44,8 +44,8 @@ pub(crate) fn save(store: &ProfileStore, profile: &str, force: bool) -> Result<S
 }
 
 pub(crate) fn use_profile(store: &ProfileStore, profile: &str) -> Result<UseResult> {
-    let source = store.profile_file_path(Tool::Codex, profile, AUTH_FILE);
-    ensure_file_exists(&source, "saved Codex auth profile")?;
+    let source = store.profile_file_path(Tool::CodexCli, profile, AUTH_FILE);
+    ensure_file_exists(&source, "saved Codex CLI auth profile")?;
 
     let destination = auth_path()?;
     create_private_dir_all(parent_dir(&destination)?)?;
@@ -56,7 +56,7 @@ pub(crate) fn use_profile(store: &ProfileStore, profile: &str) -> Result<UseResu
         .with_context(|| format!("failed to switch Codex to profile '{}'", profile))?;
 
     Ok(UseResult {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         profile: profile.to_owned(),
         source,
         destination,
@@ -65,27 +65,31 @@ pub(crate) fn use_profile(store: &ProfileStore, profile: &str) -> Result<UseResu
 }
 
 pub(crate) fn list(store: &ProfileStore) -> Result<Vec<String>> {
-    store.list_tool_profiles(Tool::Codex, AUTH_FILE)
+    store.list_tool_profiles(Tool::CodexCli, AUTH_FILE)
 }
 
 pub(crate) fn current(store: &ProfileStore) -> Result<CurrentResult> {
     let active = auth_path()?;
     if !active.is_file() {
         return Ok(CurrentResult {
-            tool: Tool::Codex,
+            tool: Tool::CodexCli,
             state: CurrentState::Unknown,
         });
     }
 
-    let active_auth = fs::read(&active)
-        .with_context(|| format!("failed to read active Codex auth at {}", active.display()))?;
+    let active_auth = fs::read(&active).with_context(|| {
+        format!(
+            "failed to read active Codex CLI auth at {}",
+            active.display()
+        )
+    })?;
 
     let mut matches = Vec::new();
     for profile in list(store)? {
-        let profile_auth_path = store.profile_file_path(Tool::Codex, &profile, AUTH_FILE);
+        let profile_auth_path = store.profile_file_path(Tool::CodexCli, &profile, AUTH_FILE);
         let profile_auth = fs::read(&profile_auth_path).with_context(|| {
             format!(
-                "failed to read saved Codex profile '{}' at {}",
+                "failed to read saved Codex CLI profile '{}' at {}",
                 profile,
                 profile_auth_path.display()
             )
@@ -97,36 +101,36 @@ pub(crate) fn current(store: &ProfileStore) -> Result<CurrentResult> {
     }
 
     Ok(CurrentResult {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         state: current_state(matches),
     })
 }
 
 pub(crate) fn remove(store: &ProfileStore, profile: &str, force: bool) -> Result<RemoveResult> {
-    let profile_dir = store.tool_profiles_dir(Tool::Codex).join(profile);
+    let profile_dir = store.tool_profiles_dir(Tool::CodexCli).join(profile);
     let auth_path = profile_dir.join(AUTH_FILE);
-    ensure_file_exists(&auth_path, "saved Codex auth profile")?;
+    ensure_file_exists(&auth_path, "saved Codex CLI auth profile")?;
 
     let current = current(store)?;
-    ensure_removable_profile(Tool::Codex, profile, &current.state, force)?;
+    ensure_removable_profile(Tool::CodexCli, profile, &current.state, force)?;
 
     fs::remove_dir_all(&profile_dir)
         .with_context(|| format!("failed to remove {}", profile_dir.display()))?;
 
     Ok(RemoveResult {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         profile: profile.to_owned(),
         removed: profile_dir,
     })
 }
 
 pub(crate) fn backups(store: &ProfileStore) -> Result<Vec<BackupEntry>> {
-    store.list_tool_backups(Tool::Codex)
+    store.list_tool_backups(Tool::CodexCli)
 }
 
 pub(crate) fn restore(store: &ProfileStore, backup_id: &str) -> Result<RestoreResult> {
-    let source = store.tool_backups_dir(Tool::Codex).join(backup_id);
-    ensure_file_exists(&source, "Codex auth backup")?;
+    let source = store.tool_backups_dir(Tool::CodexCli).join(backup_id);
+    ensure_file_exists(&source, "Codex CLI auth backup")?;
 
     let destination = auth_path()?;
     create_private_dir_all(parent_dir(&destination)?)?;
@@ -137,7 +141,7 @@ pub(crate) fn restore(store: &ProfileStore, backup_id: &str) -> Result<RestoreRe
         .with_context(|| format!("failed to restore Codex backup '{}'", backup_id))?;
 
     Ok(RestoreResult {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         backup_id: backup_id.to_owned(),
         source,
         destination,
@@ -169,7 +173,7 @@ pub(crate) fn shell(store: &ProfileStore, profile: &str) -> Result<ShellResult> 
 
     let status = Command::new(&shell)
         .env("CODEX_HOME", session.home())
-        .env("AITH_TOOL", Tool::Codex.key())
+        .env("AITH_TOOL", Tool::CodexCli.key())
         .env("AITH_PROFILE", profile)
         .status()
         .with_context(|| format!("failed to start shell '{}'", shell.to_string_lossy()))?;
@@ -183,7 +187,7 @@ pub(crate) fn inspect() -> ToolStatus {
     let config_dir = config_dir();
 
     ToolStatus {
-        tool: Tool::Codex,
+        tool: Tool::CodexCli,
         paths: vec![
             super::path_check("config dir", config_dir.clone()),
             super::path_check(
@@ -207,14 +211,14 @@ struct CodexSession {
 
 impl CodexSession {
     fn stage(store: &ProfileStore, profile: &str) -> Result<Self> {
-        let source = store.profile_file_path(Tool::Codex, profile, AUTH_FILE);
-        ensure_file_exists(&source, "saved Codex auth profile")?;
+        let source = store.profile_file_path(Tool::CodexCli, profile, AUTH_FILE);
+        ensure_file_exists(&source, "saved Codex CLI auth profile")?;
 
         let temp_dir = TempDir::create("aith-codex")?;
         let home = temp_dir.path();
 
         copy_file_private(&source, &home.join(AUTH_FILE))
-            .with_context(|| format!("failed to stage Codex profile '{}'", profile))?;
+            .with_context(|| format!("failed to stage Codex CLI profile '{}'", profile))?;
 
         let config_path = active_config_path()?;
         if config_path.is_file() {
@@ -235,10 +239,10 @@ fn backup_active_auth(store: &ProfileStore, active_auth_path: &Path) -> Result<O
         return Ok(None);
     }
 
-    let backup = store.backup_path(Tool::Codex, BACKUP_EXTENSION)?;
+    let backup = store.backup_path(Tool::CodexCli, BACKUP_EXTENSION)?;
     store.create_private_store_dir_all(parent_dir(&backup)?)?;
     copy_file_private(active_auth_path, &backup)
-        .context("failed to back up current Codex auth file")?;
+        .context("failed to back up current Codex CLI auth file")?;
 
     Ok(Some(backup))
 }

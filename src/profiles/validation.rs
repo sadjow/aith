@@ -131,7 +131,7 @@ mod tests {
     fn blocks_removing_current_profile_without_force() {
         assert!(
             ensure_removable_profile(
-                Tool::Codex,
+                Tool::CodexCli,
                 "work",
                 &CurrentState::Known("work".to_owned()),
                 false
@@ -140,7 +140,7 @@ mod tests {
         );
         assert!(
             ensure_removable_profile(
-                Tool::Codex,
+                Tool::CodexCli,
                 "work",
                 &CurrentState::Ambiguous(vec!["personal".to_owned(), "work".to_owned()]),
                 false
@@ -149,7 +149,7 @@ mod tests {
         );
         assert!(
             ensure_removable_profile(
-                Tool::Codex,
+                Tool::CodexCli,
                 "work",
                 &CurrentState::Known("work".to_owned()),
                 true
@@ -158,7 +158,7 @@ mod tests {
         );
         assert!(
             ensure_removable_profile(
-                Tool::Codex,
+                Tool::CodexCli,
                 "old",
                 &CurrentState::Known("work".to_owned()),
                 false
