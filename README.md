@@ -14,6 +14,7 @@ Implemented:
 
 - Tool status checks for Codex, Claude Code, and Cursor.
 - Codex profile save/list/current/use/remove.
+- Codex backup list/restore.
 - Automatic backup before replacing active Codex auth.
 - Private Unix permissions for stored profile directories and auth files.
 
@@ -22,7 +23,6 @@ Not implemented yet:
 - Claude Code profile switching.
 - Cursor profile switching.
 - One-command or shell-scoped temporary profiles.
-- Backup listing and restore commands.
 
 ## Quick Start
 
@@ -45,6 +45,13 @@ Inspect and switch Codex profiles:
 cargo run -- list codex
 cargo run -- current codex
 cargo run -- use codex personal
+```
+
+Inspect backups created by profile switches:
+
+```sh
+cargo run -- backups codex
+cargo run -- restore codex auth-1778702155-74626.json
 ```
 
 Remove a saved Codex profile:
@@ -157,6 +164,37 @@ aith remove codex personal --force
 This removes only the saved profile directory. It does not touch active Codex
 auth and does not delete backups.
 
+### Backups
+
+List backups created before profile switches or restores:
+
+```sh
+aith backups codex
+```
+
+Example output:
+
+```text
+auth-1778702155-74626.json      /Users/sadjow/Library/Application Support/aith/backups/codex/auth-1778702155-74626.json
+```
+
+Backup IDs use this generated form:
+
+```text
+auth-<timestamp>-<pid>.json
+```
+
+### Restore
+
+Restore a backup into the active auth location:
+
+```sh
+aith restore codex auth-1778702155-74626.json
+```
+
+For Codex, this copies the selected backup to the active `auth.json`. The
+current active `auth.json` is backed up first, so restore is reversible.
+
 ## Storage
 
 Profiles are stored under `AITH_HOME` when it is set. Otherwise, `aith` uses the
@@ -185,9 +223,11 @@ are written with `0600` permissions.
 
 - Credential file contents are never printed by status/current/list commands.
 - Profile names are limited to ASCII letters, numbers, `-`, and `_`.
-- `use` creates a backup before replacing active Codex auth.
+- `use` and `restore` create a backup before replacing active Codex auth.
 - `remove` refuses to delete the active matching profile unless `--force` is
   passed.
+- `restore` only accepts generated backup IDs in the form
+  `auth-<timestamp>-<pid>.json`.
 - Claude Code and Cursor profile switching intentionally return “not implemented
   yet” until their auth models are handled explicitly.
 
@@ -218,8 +258,6 @@ devenv shell -- ci
 ```sh
 aith exec cursor work -- cursor agent
 aith shell codex client-a
-aith backups codex
-aith restore codex <backup-id>
 ```
 
 ## Design Direction

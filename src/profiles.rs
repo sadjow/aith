@@ -32,6 +32,15 @@ pub struct UseResult {
 }
 
 #[derive(Debug)]
+pub struct RestoreResult {
+    pub tool: Tool,
+    pub backup_id: String,
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub backup: Option<PathBuf>,
+}
+
+#[derive(Debug)]
 pub struct RemoveResult {
     pub tool: Tool,
     pub profile: String,
@@ -42,6 +51,12 @@ pub struct RemoveResult {
 pub struct CurrentResult {
     pub tool: Tool,
     pub state: CurrentState,
+}
+
+#[derive(Debug)]
+pub struct BackupEntry {
+    pub id: String,
+    pub path: PathBuf,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -98,6 +113,22 @@ impl ProfileStore {
 
         match tool {
             Tool::Codex => self.remove_codex(profile, force),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn backups(&self, tool: Tool) -> Result<Vec<BackupEntry>> {
+        match tool {
+            Tool::Codex => self.list_tool_backups(tool),
+            Tool::Claude | Tool::Cursor => unsupported(tool),
+        }
+    }
+
+    pub fn restore(&self, tool: Tool, backup_id: &str) -> Result<RestoreResult> {
+        validate_backup_id(backup_id)?;
+
+        match tool {
+            Tool::Codex => self.restore_codex(backup_id),
             Tool::Claude | Tool::Cursor => unsupported(tool),
         }
     }
@@ -233,6 +264,35 @@ impl ProfileStore {
         })
     }
 
+    fn restore_codex(&self, backup_id: &str) -> Result<RestoreResult> {
+        let source = self.tool_backups_dir(Tool::Codex).join(backup_id);
+        ensure_file_exists(&source, "Codex auth backup")?;
+
+        let destination = codex_auth_path()?;
+        create_private_dir_all(parent_dir(&destination)?)?;
+
+        let backup = if destination.exists() {
+            let backup = self.backup_path(Tool::Codex)?;
+            self.create_private_store_dir_all(parent_dir(&backup)?)?;
+            copy_file_private(&destination, &backup)
+                .context("failed to back up current Codex auth file")?;
+            Some(backup)
+        } else {
+            None
+        };
+
+        copy_file_private(&source, &destination)
+            .with_context(|| format!("failed to restore Codex backup '{}'", backup_id))?;
+
+        Ok(RestoreResult {
+            tool: Tool::Codex,
+            backup_id: backup_id.to_owned(),
+            source,
+            destination,
+            backup,
+        })
+    }
+
     fn profile_auth_path(&self, tool: Tool, profile: &str) -> PathBuf {
         self.tool_profiles_dir(tool)
             .join(profile)
@@ -243,6 +303,38 @@ impl ProfileStore {
         self.root.join("profiles").join(tool.key())
     }
 
+    fn list_tool_backups(&self, tool: Tool) -> Result<Vec<BackupEntry>> {
+        let root = self.tool_backups_dir(tool);
+        if !root.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut backups = Vec::new();
+        for entry in
+            fs::read_dir(&root).with_context(|| format!("failed to read {}", root.display()))?
+        {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if validate_backup_id(&id).is_ok() {
+                backups.push(BackupEntry {
+                    id,
+                    path: entry.path(),
+                });
+            }
+        }
+
+        backups.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(backups)
+    }
+
+    fn tool_backups_dir(&self, tool: Tool) -> PathBuf {
+        self.root.join("backups").join(tool.key())
+    }
+
     fn backup_path(&self, tool: Tool) -> Result<PathBuf> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -250,9 +342,7 @@ impl ProfileStore {
             .as_secs();
 
         Ok(self
-            .root
-            .join("backups")
-            .join(tool.key())
+            .tool_backups_dir(tool)
             .join(format!("auth-{timestamp}-{}.json", std::process::id())))
     }
 
@@ -306,6 +396,34 @@ fn validate_profile_name(profile: &str) -> Result<()> {
         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
         bail!("profile names may only contain ASCII letters, numbers, '-' and '_'");
+    }
+
+    Ok(())
+}
+
+fn validate_backup_id(backup_id: &str) -> Result<()> {
+    let Some(rest) = backup_id.strip_prefix("auth-") else {
+        bail!("backup id must use the form auth-<timestamp>-<pid>.json");
+    };
+
+    let Some(rest) = rest.strip_suffix(".json") else {
+        bail!("backup id must use the form auth-<timestamp>-<pid>.json");
+    };
+
+    let Some((timestamp, pid)) = rest.split_once('-') else {
+        bail!("backup id must use the form auth-<timestamp>-<pid>.json");
+    };
+
+    if timestamp.is_empty() || pid.is_empty() {
+        bail!("backup id must use the form auth-<timestamp>-<pid>.json");
+    }
+
+    if !timestamp.bytes().all(|byte| byte.is_ascii_digit()) {
+        bail!("backup timestamp must contain only digits");
+    }
+
+    if !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+        bail!("backup process id must contain only digits");
     }
 
     Ok(())
@@ -436,7 +554,10 @@ fn ensure_removable_profile(
 
 #[cfg(test)]
 mod tests {
-    use super::{CurrentState, current_state, ensure_removable_profile, validate_profile_name};
+    use super::{
+        CurrentState, current_state, ensure_removable_profile, validate_backup_id,
+        validate_profile_name,
+    };
     use crate::tools::Tool;
 
     #[test]
@@ -507,5 +628,14 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn validates_generated_backup_ids() {
+        assert!(validate_backup_id("auth-1778702155-74626.json").is_ok());
+        assert!(validate_backup_id("auth-1778702155.json").is_err());
+        assert!(validate_backup_id("auth-1778702155-74626").is_err());
+        assert!(validate_backup_id("auth-1778702155-pid.json").is_err());
+        assert!(validate_backup_id("../auth-1778702155-74626.json").is_err());
     }
 }

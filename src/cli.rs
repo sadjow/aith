@@ -2,7 +2,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::profiles::{
-    CurrentResult, CurrentState, ProfileStore, RemoveResult, SaveResult, UseResult,
+    BackupEntry, CurrentResult, CurrentState, ProfileStore, RemoveResult, RestoreResult,
+    SaveResult, UseResult,
 };
 use crate::tools::{Tool, ToolStatus};
 
@@ -60,6 +61,23 @@ enum Command {
         /// Remove the profile even if it matches the active auth state.
         #[arg(long, short)]
         force: bool,
+    },
+
+    /// List auth backups created before profile switches or restores.
+    Backups {
+        /// Tool whose backups should be listed.
+        #[arg(value_enum)]
+        tool: ToolArg,
+    },
+
+    /// Restore an auth backup.
+    Restore {
+        /// Tool whose backup should be restored.
+        #[arg(value_enum)]
+        tool: ToolArg,
+
+        /// Backup id from `aith backups <tool>`.
+        backup_id: String,
     },
 
     /// Show which saved profile matches the active auth state.
@@ -141,6 +159,26 @@ pub fn run() -> Result<()> {
             let result = store.remove(tool.into(), &profile, force)?;
             print_remove_result(&result);
         }
+        Command::Backups { tool } => {
+            let tool = Tool::from(tool);
+            let store = ProfileStore::new()?;
+            let backups = store.backups(tool)?;
+
+            if backups.is_empty() {
+                println!(
+                    "no {} backups saved in {}",
+                    tool.key(),
+                    store.root().display()
+                );
+            } else {
+                print_backups(&backups);
+            }
+        }
+        Command::Restore { tool, backup_id } => {
+            let store = ProfileStore::new()?;
+            let result = store.restore(tool.into(), &backup_id)?;
+            print_restore_result(&result);
+        }
         Command::Current { tool } => {
             let store = ProfileStore::new()?;
             let result = store.current(tool.into())?;
@@ -193,6 +231,26 @@ fn print_use_result(result: &UseResult) {
 fn print_remove_result(result: &RemoveResult) {
     println!("removed {} profile '{}'", result.tool.key(), result.profile);
     println!("  removed {}", result.removed.display());
+}
+
+fn print_backups(backups: &[BackupEntry]) {
+    for backup in backups {
+        println!("{:<32} {}", backup.id, backup.path.display());
+    }
+}
+
+fn print_restore_result(result: &RestoreResult) {
+    println!(
+        "restored {} backup '{}'",
+        result.tool.key(),
+        result.backup_id
+    );
+    println!("  source      {}", result.source.display());
+    println!("  destination {}", result.destination.display());
+
+    if let Some(backup) = &result.backup {
+        println!("  backup      {}", backup.display());
+    }
 }
 
 fn print_current_result(result: &CurrentResult) {
