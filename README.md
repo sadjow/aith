@@ -279,7 +279,15 @@ aith use codex-cli personal
 ```
 
 For Codex CLI, this replaces the active `auth.json` with the saved profile
-snapshot. The previous active `auth.json` is backed up first.
+snapshot. The previous active `auth.json` is backed up first. If the previous
+active profile was last activated by `aith` and Codex has since rotated its
+OAuth tokens, `aith` syncs the refreshed active `auth.json` back to that saved
+profile before switching away.
+
+Codex app/plugin connector OAuth state, such as `codex_apps` MCP connector
+tokens, is separate from the Codex CLI account `auth.json`. If a connector
+reports `token_revoked` after an account switch, re-authenticate that connector
+for the currently active Codex account.
 
 ### Remove
 
@@ -359,8 +367,10 @@ profile's `auth.json` into it, copies the current Codex CLI `config.toml` when
 one exists, and runs the command with that temporary `CODEX_HOME`.
 
 The active Codex CLI auth file is not modified, and the temporary directory is
-removed after the command exits. `aith exec` exits with the same status code as
-the child command.
+removed after the command exits. If Codex refreshes OAuth tokens inside the
+temporary `CODEX_HOME`, the refreshed `auth.json` is synced back to the saved
+profile so the profile does not keep a stale refresh token. `aith exec` exits
+with the same status code as the child command.
 
 For Claude Code and Cursor Agent, `exec` resolves saved env references at runtime and
 starts the child command with those target variables set. Config files, login
@@ -382,8 +392,10 @@ home. This lets separate terminal tabs use different Codex CLI profiles at the
 same time.
 
 The active Codex CLI auth file is not modified, and the temporary directory is
-removed when the shell exits. `aith shell` exits with the same status code as
-the shell.
+removed when the shell exits. If Codex refreshes OAuth tokens inside the
+temporary `CODEX_HOME`, the refreshed `auth.json` is synced back to the saved
+profile so the profile does not keep a stale refresh token. `aith shell` exits
+with the same status code as the shell.
 
 For Claude Code and Cursor Agent, `shell` resolves saved env references and starts your
 configured shell with those variables set. This lets separate terminal tabs use
@@ -419,6 +431,17 @@ profiles/<storage-key>/<profile>/profile.toml
 
 Storage keys remain the short legacy names for compatibility with existing
 profiles: `codex`, `claude`, and `cursor`.
+
+The last Codex CLI profile activated or saved by `aith` is tracked as:
+
+```text
+state/codex/active-profile
+```
+
+This marker lets `aith use codex-cli ...` sync refreshed OAuth tokens back to
+the previous saved profile before switching to another profile. The sync only
+occurs when the active auth and saved profile share the same Codex
+`tokens.account_id`.
 
 Example Claude Code profile:
 
@@ -503,10 +526,14 @@ blocked until each desktop auth model has a dedicated, reversible implementation
   commands.
 - Profile names are limited to ASCII letters, numbers, `-`, and `_`.
 - `use` and `restore` create a backup before replacing active Codex CLI auth.
+- `use` syncs the previously activated Codex CLI profile before switching away
+  when the active auth still belongs to the same Codex account id.
 - `exec` runs with a temporary `CODEX_HOME` and does not modify active Codex CLI
-  auth.
+  auth. Refreshed Codex CLI tokens are synced back to the selected saved
+  profile.
 - `shell` starts a temporary `CODEX_HOME` session and does not modify active
-  Codex CLI auth.
+  Codex CLI auth. Refreshed Codex CLI tokens are synced back to the selected
+  saved profile.
 - Env profiles store source env variable names for secrets, not secret values.
   Secret values are resolved only when `exec` or `shell` starts.
 - Claude Code and Cursor Agent env sessions do not modify config files,
@@ -518,6 +545,11 @@ blocked until each desktop auth model has a dedicated, reversible implementation
   `auth-<timestamp>-<pid>.json`.
 - Claude Code, Cursor Agent, and desktop global login switching intentionally
   return “not implemented yet” until their auth models are handled explicitly.
+- Codex CLI OAuth refresh tokens can rotate. Avoid running multiple concurrent
+  sessions for the same Codex profile unless you are ready to re-save the
+  profile from a fresh login.
+- Codex app/plugin connector OAuth tokens are not part of Codex CLI profile
+  snapshots and may need to be re-authenticated after switching accounts.
 
 ## Development
 

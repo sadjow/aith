@@ -36,11 +36,11 @@ impl TestEnv {
     }
 
     fn write_auth(&self, account: &str) {
-        fs::write(
-            self.codex_home.join("auth.json"),
-            format!("{{\"account\":\"{account}\"}}\n"),
-        )
-        .expect("write fake codex auth");
+        self.write_auth_contents(&format!("{{\"account\":\"{account}\"}}\n"));
+    }
+
+    fn write_auth_contents(&self, contents: &str) {
+        fs::write(self.codex_home.join("auth.json"), contents).expect("write fake codex auth");
     }
 
     fn write_config(&self, config: &str) {
@@ -377,6 +377,51 @@ fn use_creates_backup_and_restore_is_reversible() {
 }
 
 #[test]
+fn use_syncs_rotated_active_auth_for_tracked_profile_before_switching() {
+    let env = TestEnv::new();
+    env.write_auth_contents(
+        "{\"tokens\":{\"account_id\":\"acct_personal\",\"refresh_token\":\"personal-1\"}}\n",
+    );
+
+    env.command()
+        .args(["save", "codex", "personal"])
+        .assert()
+        .success();
+
+    env.write_auth_contents(
+        "{\"tokens\":{\"account_id\":\"acct_work\",\"refresh_token\":\"work-1\"}}\n",
+    );
+
+    env.command()
+        .args(["save", "codex", "work"])
+        .assert()
+        .success();
+
+    env.command()
+        .args(["use", "codex", "personal"])
+        .assert()
+        .success();
+
+    env.write_auth_contents(
+        "{\"tokens\":{\"account_id\":\"acct_personal\",\"refresh_token\":\"personal-rotated\"}}\n",
+    );
+
+    env.command()
+        .args(["use", "codex", "work"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(env.profile_auth("personal")).expect("read synced profile"),
+        "{\"tokens\":{\"account_id\":\"acct_personal\",\"refresh_token\":\"personal-rotated\"}}\n"
+    );
+    assert_eq!(
+        env.read_auth(),
+        "{\"tokens\":{\"account_id\":\"acct_work\",\"refresh_token\":\"work-1\"}}\n"
+    );
+}
+
+#[test]
 fn remove_refuses_current_profile_unless_forced() {
     let env = TestEnv::new();
     env.write_auth("work");
@@ -420,7 +465,7 @@ fn exec_uses_temporary_codex_home_and_preserves_active_auth() {
 
     let temp_home_record = env.aith_home.join("temp-home");
     let script = format!(
-        "printf '%s' \"$CODEX_HOME\" > '{}'; cat \"$CODEX_HOME/auth.json\"; cat \"$CODEX_HOME/config.toml\"",
+        "printf '%s' \"$CODEX_HOME\" > '{}'; cat \"$CODEX_HOME/auth.json\"; cat \"$CODEX_HOME/config.toml\"; printf '%s\\n' '{{\"account\":\"work\",\"refresh\":\"rotated\"}}' > \"$CODEX_HOME/auth.json\"",
         shell_path(&temp_home_record)
     );
 
@@ -432,6 +477,10 @@ fn exec_uses_temporary_codex_home_and_preserves_active_auth() {
         .stdout(predicate::str::contains("model = \"test-model\""));
 
     assert_eq!(env.read_auth(), "{\"account\":\"personal\"}\n");
+    assert_eq!(
+        fs::read_to_string(env.profile_auth("work")).expect("read synced profile"),
+        "{\"account\":\"work\",\"refresh\":\"rotated\"}\n"
+    );
 
     let temp_home = fs::read_to_string(temp_home_record).expect("read temp home path");
     assert_ne!(Path::new(&temp_home), env.codex_home.as_path());
@@ -449,9 +498,22 @@ fn exec_propagates_child_exit_status() {
         .success();
 
     env.command()
-        .args(["exec", "codex", "work", "--", "sh", "-c", "exit 7"])
+        .args([
+            "exec",
+            "codex",
+            "work",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s\\n' '{\"account\":\"work\",\"refresh\":\"failed-command\"}' > \"$CODEX_HOME/auth.json\"; exit 7",
+        ])
         .assert()
         .code(7);
+
+    assert_eq!(
+        fs::read_to_string(env.profile_auth("work")).expect("read synced profile"),
+        "{\"account\":\"work\",\"refresh\":\"failed-command\"}\n"
+    );
 }
 
 #[test]
@@ -472,7 +534,7 @@ fn shell_uses_temporary_codex_home_and_preserves_active_auth() {
     write_executable(
         &fake_shell,
         &format!(
-            "#!/bin/sh\nprintf '%s\\n%s\\n%s\\n' \"$CODEX_HOME\" \"$AITH_TOOL\" \"$AITH_PROFILE\" > '{}'\ncat \"$CODEX_HOME/auth.json\"\ncat \"$CODEX_HOME/config.toml\"\n",
+            "#!/bin/sh\nprintf '%s\\n%s\\n%s\\n' \"$CODEX_HOME\" \"$AITH_TOOL\" \"$AITH_PROFILE\" > '{}'\ncat \"$CODEX_HOME/auth.json\"\ncat \"$CODEX_HOME/config.toml\"\nprintf '%s\\n' '{{\"account\":\"work\",\"refresh\":\"shell-rotated\"}}' > \"$CODEX_HOME/auth.json\"\n",
             shell_path(&session_record)
         ),
     );
@@ -486,6 +548,10 @@ fn shell_uses_temporary_codex_home_and_preserves_active_auth() {
         .stdout(predicate::str::contains("model = \"test-model\""));
 
     assert_eq!(env.read_auth(), "{\"account\":\"personal\"}\n");
+    assert_eq!(
+        fs::read_to_string(env.profile_auth("work")).expect("read synced profile"),
+        "{\"account\":\"work\",\"refresh\":\"shell-rotated\"}\n"
+    );
 
     let session = fs::read_to_string(session_record).expect("read shell session record");
     let mut lines = session.lines();
